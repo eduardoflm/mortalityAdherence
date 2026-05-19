@@ -94,7 +94,8 @@ testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
   if (length(missing_cols) > 0)
     stop(paste0(
       "Missing column(s) in 'data': ", paste(missing_cols, collapse = ", "),
-      "\nRequired columns: age, exposed, deaths"
+      "\nRequired columns: age, exposed, deaths",
+      "\nOptional column : year (for multi-year data in long format)"
     ))
 
   if (any(data$exposed < 0, na.rm = TRUE))
@@ -103,6 +104,33 @@ testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
     stop("'deaths' cannot contain negative values.")
   if (alpha <= 0 || alpha >= 1)
     stop("'alpha' must be strictly between 0 and 1.")
+
+  # --- Detect data structure (single year vs multi-year long format) -------
+  has_year_col   <- "year" %in% names(data)
+  has_repeat_age <- anyDuplicated(data$age) > 0L
+
+  if (has_year_col) {
+    n_years <- length(unique(data$year))
+    message(sprintf(paste0(
+      "  [Data format] 'year' column detected: %d year(s) found.\n",
+      "  Each (year, age) row is treated as an independent cell in all tests.\n",
+      "  Expected data structure: long format with one row per year-age combination."
+    ), n_years))
+  } else if (has_repeat_age) {
+    n_rows_per_age <- max(tabulate(data$age))
+    message(sprintf(paste0(
+      "  [Data format] Repeated ages detected (up to %d rows per age) ",
+      "but no 'year' column found.\n",
+      "  Treating each row as an independent observation (multi-year long format).\n",
+      "  Tip: add a 'year' column to make the data structure explicit."
+    ), n_rows_per_age))
+  } else {
+    message(paste0(
+      "  [Data format] Single-year data detected (each age appears once).\n",
+      "  For multi-year data, supply one row per (year, age) combination ",
+      "in long format,\n  optionally with a 'year' column."
+    ))
+  }
 
   # --- Load the mortality table -------------------------------------------
   table_name <- "Custom"
@@ -119,37 +147,52 @@ testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
     stop("'table' must be a character name or a data.frame with columns 'age' and 'qx'.")
   }
 
-  # --- Merge data with table ----------------------------------------------
-  data$age      <- as.integer(data$age)
-  table_df$age  <- as.integer(table_df$age)
+  # --- Merge each row with its qx (one row = one cell, no aggregation) ----
+  data$age     <- as.integer(data$age)
+  table_df$age <- as.integer(table_df$age)
 
   merged <- merge(data, table_df[, c("age", "qx")], by = "age", all.x = FALSE)
   merged <- merged[merged$exposed > 0, ]
-  merged <- merged[order(merged$age), ]
+
+  # Sort by year (if present) then age, so cells are in chronological order
+  if (has_year_col) {
+    merged <- merged[order(merged$year, merged$age), ]
+  } else {
+    merged <- merged[order(merged$age), ]
+  }
 
   if (nrow(merged) < 3L)
     stop(paste0(
-      "Fewer than 3 valid age groups after merging with the mortality table. ",
+      "Fewer than 3 valid cells after merging with the mortality table. ",
       "Check that the ages in 'data' overlap with the table's age range."
     ))
 
-  # --- Prepare variables --------------------------------------------------
+  # --- Prepare variables (one entry per cell) -----------------------------
   deaths   <- as.integer(merged$deaths)
   exposed  <- merged$exposed
   qx       <- merged$qx
-  expected <- exposed * qx                              # mu_x = E_x * q_x
+  expected <- exposed * qx                       # mu_{x,t} = E_{x,t} * q_x
   total_E  <- sum(expected)
   log_off  <- log(pmax(expected, 1e-12))
   ages     <- merged$age
-  z_age    <- as.numeric(scale(ages))                   # standardised age covariate
+  z_age    <- as.numeric(scale(ages))            # standardised age covariate
+
+  n_cells  <- nrow(merged)
+  n_ages   <- length(unique(ages))
+  n_years  <- if (has_year_col) length(unique(merged$year))
+              else if (has_repeat_age) max(tabulate(ages))
+              else 1L
 
   if (verbose) {
     cat(sprintf(
-      "mortalityAdherence | Table: %s | Ages: %d-%d | Exposed: %d | ",
-      table_name, min(ages), max(ages), as.integer(sum(exposed))
+      "mortalityAdherence | Table: %s | %d cell(s) | %d unique age(s) | %d year(s)\n",
+      table_name, n_cells, n_ages, n_years
     ))
-    cat(sprintf("Observed: %d | Expected: %.1f | A/E: %.4f\n",
-                sum(deaths), total_E, sum(deaths) / pmax(total_E, 1e-12)))
+    cat(sprintf(
+      "  Exposed: %d | Observed: %d | Expected: %.1f | A/E: %.4f\n",
+      as.integer(sum(exposed)), sum(deaths), total_E,
+      sum(deaths) / pmax(total_E, 1e-12)
+    ))
     cat("  Running non-parametric tests...\n")
   }
 
@@ -163,7 +206,7 @@ testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
   if (verbose) cat("  Running Negative Binomial family tests...\n")
   res_nb    <- .test_nb_family(deaths, log_off, z_age, alpha)
 
-  # Compute dispersion ratio for reporting (Pearson chi2 / df under Poisson)
+  # Dispersion ratio for reporting
   fit_pois_disp <- tryCatch(
     stats::glm(deaths ~ 1 + offset(log_off), family = stats::poisson),
     error = function(e) NULL
@@ -253,7 +296,9 @@ testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
     data_used        = merged,
     table_name       = table_name,
     alpha            = alpha,
-    n_ages           = nrow(merged),
+    n_cells          = n_cells,
+    n_ages           = n_ages,
+    n_years          = n_years,
     total_exposed    = as.integer(sum(exposed)),
     observed_deaths  = sum(deaths),
     expected_deaths  = round(total_E, 2),
@@ -300,7 +345,9 @@ printResult <- function(x, show_notes = TRUE, ...) {
   cat(strrep("=", w), "\n", sep = "")
   cat(sprintf("  Mortality table   : %s\n",   x$table_name))
   cat(sprintf("  Significance level: %.1f%%\n", x$alpha * 100))
-  cat(sprintf("  Age groups        : %d\n",   x$n_ages))
+  cat(sprintf("  Cells (rows)      : %d\n",   x$n_cells))
+  cat(sprintf("  Unique ages       : %d\n",   x$n_ages))
+  cat(sprintf("  Years             : %d\n",   x$n_years))
   cat(sprintf("  Total exposed     : %s\n",
               format(x$total_exposed,   big.mark = ",")))
   cat(sprintf("  Observed deaths   : %s\n",
