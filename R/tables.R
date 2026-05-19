@@ -86,16 +86,22 @@ loadTable <- function(name) {
 
   mt <- get("mortality_tables", envir = asNamespace("mortalityAdherence"))
 
-  # The dataset column name equals the table name exactly
-  if (!name %in% names(mt))
+  # Column names may have hyphens normalised to dots by R internals
+  # Try exact name first, then dot-substituted version
+  col_idx <- which(names(mt) == name)
+  if (length(col_idx) == 0L) {
+    name_dots <- gsub("-", ".", name, fixed = TRUE)
+    col_idx   <- which(names(mt) == name_dots)
+  }
+  if (length(col_idx) == 0L)
     stop(sprintf(
-      "Internal error: column '%s' not found in mortality_tables dataset. ",
-      "Please report this bug.", name
+      "Internal error: column '%s' not found in mortality_tables.\nAvailable columns: %s",
+      name, paste(names(mt), collapse = ", ")
     ))
 
   data.frame(
     age = mt$age,
-    qx  = mt[[name]],
+    qx  = mt[[col_idx]],
     stringsAsFactors = FALSE
   )
 }
