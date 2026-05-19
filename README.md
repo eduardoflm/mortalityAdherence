@@ -1,8 +1,8 @@
 # mortalityAdherence <img src="logo.png" align="right" height="138" alt="mortalityAdherence logo" />
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/yourusername/mortalityAdherence/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/yourusername/mortalityAdherence/actions/workflows/R-CMD-check.yaml)
-[![Codecov test coverage](https://codecov.io/gh/yourusername/mortalityAdherence/branch/main/graph/badge.svg)](https://app.codecov.io/gh/yourusername/mortalityAdherence?branch=main)
+[![R-CMD-check](https://github.com/eduardoflm/mortalityAdherence/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/eduardoflm/mortalityAdherence/actions/workflows/R-CMD-check.yaml)
+[![Codecov test coverage](https://codecov.io/gh/eduardoflm/mortalityAdherence/branch/main/graph/badge.svg)](https://app.codecov.io/gh/eduardoflm/mortalityAdherence?branch=main)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![R version](https://img.shields.io/badge/R-%3E%3D4.0.0-blue)](https://www.r-project.org/)
 <!-- badges: end -->
