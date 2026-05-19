@@ -163,6 +163,16 @@ testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
   if (verbose) cat("  Running Negative Binomial family tests...\n")
   res_nb    <- .test_nb_family(deaths, log_off, z_age, alpha)
 
+  # Compute dispersion ratio for reporting (Pearson chi2 / df under Poisson)
+  fit_pois_disp <- tryCatch(
+    stats::glm(deaths ~ 1 + offset(log_off), family = stats::poisson),
+    error = function(e) NULL
+  )
+  dispersion_ratio <- if (!is.null(fit_pois_disp))
+    round(sum(stats::residuals(fit_pois_disp, type = "pearson")^2) /
+          stats::df.residual(fit_pois_disp), 4)
+  else NA_real_
+
   # --- Assemble results ---------------------------------------------------
   all_tests <- c(
     list(KS = res_ks, ChiSquare = res_chisq),
@@ -238,16 +248,17 @@ testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
   )
 
   result <- list(
-    summary         = summary_df,
-    details         = all_tests,
-    data_used       = merged,
-    table_name      = table_name,
-    alpha           = alpha,
-    n_ages          = nrow(merged),
-    total_exposed   = as.integer(sum(exposed)),
-    observed_deaths = sum(deaths),
-    expected_deaths = round(total_E, 2),
-    ae_ratio        = round(sum(deaths) / pmax(total_E, 1e-12), 4)
+    summary          = summary_df,
+    details          = all_tests,
+    data_used        = merged,
+    table_name       = table_name,
+    alpha            = alpha,
+    n_ages           = nrow(merged),
+    total_exposed    = as.integer(sum(exposed)),
+    observed_deaths  = sum(deaths),
+    expected_deaths  = round(total_E, 2),
+    ae_ratio         = round(sum(deaths) / pmax(total_E, 1e-12), 4),
+    dispersion_ratio = dispersion_ratio
   )
   class(result) <- "adherence_result"
   result
@@ -297,6 +308,13 @@ printResult <- function(x, show_notes = TRUE, ...) {
   cat(sprintf("  Expected deaths   : %.2f\n", x$expected_deaths))
   cat(sprintf("  A/E ratio         : %.4f  (%+.1f%%)\n",
               x$ae_ratio, (x$ae_ratio - 1) * 100))
+  if (!is.null(x$dispersion_ratio) && !is.na(x$dispersion_ratio)) {
+    nb_note <- if (x$dispersion_ratio <= 1)
+      sprintf("%.4f -- no overdispersion, NB tests not applicable", x$dispersion_ratio)
+    else
+      sprintf("%.4f -- overdispersion present, NB tests applied", x$dispersion_ratio)
+    cat(sprintf("  Dispersion ratio  : %s\n", nb_note))
+  }
   cat(strrep("-", w), "\n", sep = "")
 
   # --- Results table ------------------------------------------------------
@@ -307,8 +325,9 @@ printResult <- function(x, show_notes = TRUE, ...) {
                      sprintf("%8.4f", df$statistic))
   pval_fmt <- ifelse(is.na(df$p_value),  "   --    ",
                      sprintf("%.6f", df$p_value))
-  dec_fmt  <- ifelse(df$reject_h0 == "Yes", "[ REJECT ]",
-              ifelse(df$reject_h0 == "No",  "[  pass  ]", "[  Error ]"))
+  dec_fmt  <- ifelse(df$reject_h0 == "Yes",   "[ REJECT ]",
+              ifelse(df$reject_h0 == "No",    "[  pass  ]",
+                                              "[   N/A  ]"))
 
   # Group separator tracking
   prev_family <- ""
