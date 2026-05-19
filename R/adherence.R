@@ -307,11 +307,8 @@ printResult <- function(x, show_notes = TRUE, ...) {
                      sprintf("%8.4f", df$statistic))
   pval_fmt <- ifelse(is.na(df$p_value),  "   --    ",
                      sprintf("%.6f", df$p_value))
-  dec_fmt  <- dplyr::case_when(
-    df$reject_h0 == "Yes"   ~ "[ REJECT ]",
-    df$reject_h0 == "No"    ~ "[  pass  ]",
-    TRUE                     ~ "[  Error ]"
-  )
+  dec_fmt  <- ifelse(df$reject_h0 == "Yes", "[ REJECT ]",
+              ifelse(df$reject_h0 == "No",  "[  pass  ]", "[  Error ]"))
 
   # Group separator tracking
   prev_family <- ""
@@ -341,11 +338,12 @@ printResult <- function(x, show_notes = TRUE, ...) {
     "\n  %d of %d tests reject H0 at the %.0f%% significance level.\n",
     n_rej, n_tot, x$alpha * 100
   ))
-  verdict <- dplyr::case_when(
-    n_rej == 0L  ~ "  [OK] GOOD ADHERENCE: the table fits the fund data well.",
-    n_rej <= 3L  ~ "  [!!] PARTIAL ADHERENCE: some tests failed. Review critical age groups.",
-    TRUE         ~ "  [XX] POOR ADHERENCE: consider a different table or an adjustment factor."
-  )
+  verdict <- ifelse(n_rej == 0L,
+    "  [OK] GOOD ADHERENCE: the table fits the fund data well.",
+    ifelse(n_rej <= 3L,
+    "  [!!] PARTIAL ADHERENCE: some tests failed. Review critical age groups.",
+    "  [XX] POOR ADHERENCE: consider a different table or an adjustment factor."
+  ))
   cat(verdict, "\n\n", sep = "")
 
   invisible(x)
@@ -399,11 +397,8 @@ htmlTable <- function(x, ...) {
                          sprintf("%.4f", df$statistic)),
     P.value     = ifelse(is.na(df$p_value),  "--",
                          sprintf("%.6f", df$p_value)),
-    Decision    = dplyr::case_when(
-      df$reject_h0 == "Yes"  ~ "[REJECT]",
-      df$reject_h0 == "No"   ~ "[ pass ]",
-      TRUE                    ~ "[ Error]"
-    ),
+    Decision    = ifelse(df$reject_h0 == "Yes", "[REJECT]",
+                  ifelse(df$reject_h0 == "No",  "[ pass ]", "[ Error]")),
     Note        = ifelse(is.na(df$note), "", df$note),
     check.names = FALSE,
     stringsAsFactors = FALSE
