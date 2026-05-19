@@ -11,7 +11,7 @@ export(mortality_tables)
 importFrom(MASS, glm.nb)
 importFrom(car, linearHypothesis)
 importFrom(sfsmisc, KSd)
-importFrom(stats, coef, cumsum, deviance, glm, glm.control, logLik,
+importFrom(stats, coef, deviance, glm, glm.control, logLik,
            pchisq, pnorm, poisson, qgamma, var)
 importFrom(tools, file_ext)
 importFrom(utils, read.csv)
