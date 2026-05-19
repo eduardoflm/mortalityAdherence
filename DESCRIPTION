@@ -3,18 +3,26 @@ Type: Package
 Title: Biometric Table Adherence Testing for Pension Funds
 Version: 0.1.0
 Authors@R: c(
-    person("Your", "Name", email = "your@email.com", role = c("aut", "cre"),
-           comment = c(ORCID = "0000-0000-0000-0000"))
+    person("Eduardo Fraga L.", "de Melo", email = "eduardofraga@ime.uerj.br",
+           role = c("aut", "cre"),
+           comment = c(Affiliation = "UERJ / FGV-EMAp / SUSEP")),
+    person("Helton", "Graziadei", role = "aut",
+           comment = c(Affiliation = "Federal University at Sao Carlos - UFSCar")),
+    person("Rodrigo", "Targino", role = "aut",
+           comment = c(Affiliation = "FGV-EMAp"))
   )
 Description: Tools for actuaries to test the adherence of biometric mortality
     tables to observed data from pension funds. Implements 11 statistical tests:
     Kolmogorov-Smirnov (KS), Chi-Square, Wald Type I and II and Likelihood
     Ratio Tests (LRT) Type I and II under both Poisson and Negative Binomial
-    models, and a Bayesian Credibility Interval test. Includes a built-in
-    database of 10 biometric tables used in the Brazilian actuarial market
-    (AT-2000bm, AT-2000m, AT-49M, AT-55m, AT-83ms, GAM71m, GAM83m,
-    BR-EMS2010, BR-EMS2015, BR-EMS2021), and functions for loading custom
-    tables, reading pension fund data, and displaying formatted results.
+    models, and a Bayesian Credibility Interval test. Supports multi-year data
+    in long (stacked) format, with automatic detection of repeated age groups.
+    Includes a built-in database of 10 biometric tables used in the Brazilian
+    actuarial market (AT-2000bm, AT-2000m, AT-49M, AT-55m, AT-83ms, GAM71m,
+    GAM83m, BR-EMS2010, BR-EMS2015, BR-EMS2021). Based on the research paper:
+    de Melo, Graziadei & Targino (2026) "Annuity Table Validation in Pension
+    Funds: A Comparative Power Analysis of Goodness-of-Fit Tests"
+    <https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6668699>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
