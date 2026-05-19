@@ -182,79 +182,96 @@
 
 
 # --- 1.4  Negative Binomial family (Wald I/II, LRT I/II) --------------------
-# Two glm.nb fits are shared across all four NB tests to avoid redundant fitting.
 
 #' @noRd
 .test_nb_family <- function(deaths, log_offset, z_age, alpha) {
-  ctrl <- stats::glm.control(maxit = 50)
 
-  # H0 model: offset only (beta = 0)
-  fit0 <- tryCatch(
-    MASS::glm.nb(deaths ~ 0 + offset(log_offset), control = ctrl),
+  na_res <- list(reject = NA, statistic = NA_real_, p_value = NA_real_)
+
+  # --- Test for overdispersion before fitting NB models ---
+  # Fit a Poisson GLM and compute the dispersion ratio: sum(pearson^2) / df
+  # If dispersion <= 1, data are NOT overdispersed; NB is not appropriate.
+  fit_pois <- tryCatch(
+    stats::glm(deaths ~ 1 + offset(log_offset), family = stats::poisson),
     error = function(e) NULL
   )
-  # H1a model: intercept + offset  (Type I tests)
-  fit1a <- tryCatch(
-    MASS::glm.nb(deaths ~ 1 + offset(log_offset), control = ctrl),
-    error = function(e) NULL
-  )
-  # H1b model: intercept + slope + offset  (Type II tests)
-  fit1b <- tryCatch(
-    MASS::glm.nb(deaths ~ z_age + offset(log_offset), control = ctrl),
-    error = function(e) NULL
-  )
+
+  if (is.null(fit_pois)) {
+    message("  [NB tests] Could not fit baseline Poisson model. NB tests skipped.")
+    return(list(WaldI_NB  = na_res, WaldII_NB = na_res,
+                LRTI_NB   = na_res, LRTII_NB  = na_res))
+  }
+
+  pearson_chi2 <- sum(stats::residuals(fit_pois, type = "pearson")^2)
+  df_resid     <- stats::df.residual(fit_pois)
+  dispersion   <- pearson_chi2 / df_resid
+
+  if (dispersion <= 1) {
+    message(sprintf(paste0(
+      "  [NB tests] No overdispersion detected (dispersion ratio = %.4f <= 1.0).\n",
+      "  Negative Binomial tests are not applicable and have been skipped.\n",
+      "  The Poisson-based tests are appropriate for these data."
+    ), dispersion))
+    return(list(WaldI_NB  = na_res, WaldII_NB = na_res,
+                LRTI_NB   = na_res, LRTII_NB  = na_res))
+  }
+
+  # Overdispersion confirmed — proceed with NB fitting
+  ctrl <- stats::glm.control(maxit = 200, epsilon = 1e-7)
+
+  fit0  <- tryCatch(MASS::glm.nb(deaths ~ 0 + offset(log_offset), control = ctrl),
+                    error = function(e) NULL, warning = function(w) NULL)
+  fit1a <- tryCatch(MASS::glm.nb(deaths ~ 1 + offset(log_offset), control = ctrl),
+                    error = function(e) NULL, warning = function(w) NULL)
+  fit1b <- tryCatch(MASS::glm.nb(deaths ~ z_age + offset(log_offset), control = ctrl),
+                    error = function(e) NULL, warning = function(w) NULL)
 
   # ---- Wald Type I NB -----------------------------------------------------
   if (!is.null(fit1a)) {
-    est  <- stats::coef(summary(fit1a))[1L, ]
-    pv   <- 2 * stats::pnorm(abs(est["Estimate"] / est["Std. Error"]),
-                              lower.tail = FALSE)
-    wald_I <- list(reject    = !is.na(pv) && pv < alpha,
-                   statistic = round(as.numeric(est["z value"]), 4),
-                   p_value   = round(pv, 6))
-  } else {
-    wald_I <- list(reject = NA, statistic = NA_real_, p_value = NA_real_)
-  }
+    sm <- tryCatch(stats::coef(summary(fit1a))[1L, ], error = function(e) NULL)
+    if (!is.null(sm) && !anyNA(sm[c("Estimate", "Std. Error")])) {
+      z_val  <- sm["Estimate"] / sm["Std. Error"]
+      pv     <- 2 * stats::pnorm(abs(z_val), lower.tail = FALSE)
+      wald_I <- list(reject    = !is.na(pv) && pv < alpha,
+                     statistic = round(as.numeric(z_val), 4),
+                     p_value   = round(as.numeric(pv), 6))
+    } else { wald_I <- na_res }
+  } else { wald_I <- na_res }
 
   # ---- LRT Type I NB ------------------------------------------------------
   if (!is.null(fit0) && !is.null(fit1a)) {
-    lam  <- max(2 * (as.numeric(stats::logLik(fit1a)) -
-                       as.numeric(stats::logLik(fit0))), 0)
-    pv   <- stats::pchisq(lam, df = 1L, lower.tail = FALSE)
-    lrt_I <- list(reject    = pv < alpha,
-                  statistic = round(lam, 4),
-                  p_value   = round(pv, 6))
-  } else {
-    lrt_I <- list(reject = NA, statistic = NA_real_, p_value = NA_real_)
-  }
+    lam <- tryCatch(
+      max(2 * (as.numeric(stats::logLik(fit1a)) - as.numeric(stats::logLik(fit0))), 0),
+      error = function(e) NA_real_
+    )
+    if (!is.na(lam)) {
+      pv    <- stats::pchisq(lam, df = 1L, lower.tail = FALSE)
+      lrt_I <- list(reject = pv < alpha, statistic = round(lam, 4), p_value = round(pv, 6))
+    } else { lrt_I <- na_res }
+  } else { lrt_I <- na_res }
 
   # ---- Wald Type II NB ----------------------------------------------------
   if (!is.null(fit1b)) {
     pv <- tryCatch(
-      car::linearHypothesis(
-        fit1b,
-        c("(Intercept) = 0", "z_age = 0")
-      )$`Pr(>Chisq)`[2],
-      error = function(e) NA_real_
+      car::linearHypothesis(fit1b, c("(Intercept) = 0", "z_age = 0"))$`Pr(>Chisq)`[2],
+      error = function(e) NA_real_, warning = function(w) NA_real_
     )
     wald_II <- list(reject    = !is.na(pv) && pv < alpha,
                     statistic = NA_real_,
-                    p_value   = round(pv, 6))
-  } else {
-    wald_II <- list(reject = NA, statistic = NA_real_, p_value = NA_real_)
-  }
+                    p_value   = round(as.numeric(pv), 6))
+  } else { wald_II <- na_res }
 
   # ---- LRT Type II NB -----------------------------------------------------
   if (!is.null(fit0) && !is.null(fit1b)) {
-    lam  <- max(2 * (as.numeric(stats::logLik(fit1b)) -
-                       as.numeric(stats::logLik(fit0))), 0)
-    pv   <- stats::pchisq(lam, df = 2L, lower.tail = FALSE)
-    lrt_II <- list(reject    = pv < alpha,
-                   statistic = round(lam, 4),
-                   p_value   = round(pv, 6))
-  } else {
-    lrt_II <- list(reject = NA, statistic = NA_real_, p_value = NA_real_)
-  }
+    lam <- tryCatch(
+      max(2 * (as.numeric(stats::logLik(fit1b)) - as.numeric(stats::logLik(fit0))), 0),
+      error = function(e) NA_real_
+    )
+    if (!is.na(lam)) {
+      pv     <- stats::pchisq(lam, df = 2L, lower.tail = FALSE)
+      lrt_II <- list(reject = pv < alpha, statistic = round(lam, 4), p_value = round(pv, 6))
+    } else { lrt_II <- na_res }
+  } else { lrt_II <- na_res }
 
   list(WaldI_NB  = wald_I,
        WaldII_NB = wald_II,
