@@ -1,4 +1,4 @@
-# mortalityAdherence <img src="man/figures/logo.png" align="right" height="138" alt="mortalityAdherence logo" />
+# mortalityAdherence <img src="man/logo.png" align="right" height="138" alt="mortalityAdherence logo" />
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/yourusername/mortalityAdherence/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/yourusername/mortalityAdherence/actions/workflows/R-CMD-check.yaml)
