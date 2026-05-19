@@ -303,9 +303,9 @@ printResult <- function(x, show_notes = TRUE, ...) {
   df <- x$summary
 
   # Format columns for display
-  stat_fmt <- ifelse(is.na(df$statistic), "       —",
+  stat_fmt <- ifelse(is.na(df$statistic), "      --",
                      sprintf("%8.4f", df$statistic))
-  pval_fmt <- ifelse(is.na(df$p_value),  "    —    ",
+  pval_fmt <- ifelse(is.na(df$p_value),  "   --    ",
                      sprintf("%.6f", df$p_value))
   dec_fmt  <- dplyr::case_when(
     df$reject_h0 == "Yes"   ~ "[ REJECT ]",
@@ -326,7 +326,7 @@ printResult <- function(x, show_notes = TRUE, ...) {
       prev_family <- fam
     }
     note_str <- if (show_notes && !is.na(df$note[i]))
-      sprintf("    \u2192 %s", df$note[i]) else ""
+      sprintf("    -> %s", df$note[i]) else ""
     cat(sprintf("  %-11s  %-40s  %s  %s  %s%s\n",
                 df$test[i], df$description[i],
                 stat_fmt[i], pval_fmt[i], dec_fmt[i], note_str))
@@ -338,13 +338,13 @@ printResult <- function(x, show_notes = TRUE, ...) {
   n_rej <- sum(df$reject_h0 == "Yes", na.rm = TRUE)
   n_tot <- sum(df$reject_h0 %in% c("Yes", "No"), na.rm = TRUE)
   cat(sprintf(
-    "\n  %d of %d tests reject H\u2080 at the %.0f%% significance level.\n",
+    "\n  %d of %d tests reject H0 at the %.0f%% significance level.\n",
     n_rej, n_tot, x$alpha * 100
   ))
   verdict <- dplyr::case_when(
-    n_rej == 0L              ~ "  \u2714  GOOD ADHERENCE: the table fits the fund data well.",
-    n_rej <= 3L              ~ "  \u26a0  PARTIAL ADHERENCE: some tests failed. Review critical age groups.",
-    TRUE                     ~ "  \u2718  POOR ADHERENCE: consider a different table or an adjustment factor."
+    n_rej == 0L  ~ "  [OK] GOOD ADHERENCE: the table fits the fund data well.",
+    n_rej <= 3L  ~ "  [!!] PARTIAL ADHERENCE: some tests failed. Review critical age groups.",
+    TRUE         ~ "  [XX] POOR ADHERENCE: consider a different table or an adjustment factor."
   )
   cat(verdict, "\n\n", sep = "")
 
@@ -393,16 +393,16 @@ htmlTable <- function(x, ...) {
     Test        = df$test,
     Description = df$description,
     Family      = df$family,
-    `H\u2080`  = df$h0,
+    H0          = df$h0,
     df          = df$df,
-    Statistic   = ifelse(is.na(df$statistic), "\u2014",
+    Statistic   = ifelse(is.na(df$statistic), "--",
                          sprintf("%.4f", df$statistic)),
-    `P-value`   = ifelse(is.na(df$p_value),  "\u2014",
+    P.value     = ifelse(is.na(df$p_value),  "--",
                          sprintf("%.6f", df$p_value)),
     Decision    = dplyr::case_when(
-      df$reject_h0 == "Yes"  ~ "\u2718 REJECT",
-      df$reject_h0 == "No"   ~ "\u2714 Pass",
-      TRUE                    ~ "Error"
+      df$reject_h0 == "Yes"  ~ "[REJECT]",
+      df$reject_h0 == "No"   ~ "[ pass ]",
+      TRUE                    ~ "[ Error]"
     ),
     Note        = ifelse(is.na(df$note), "", df$note),
     check.names = FALSE,
@@ -410,8 +410,8 @@ htmlTable <- function(x, ...) {
   )
 
   caption <- sprintf(
-    paste0("Adherence Tests \u2014 Table: <strong>%s</strong> ",
-           "| &alpha; = %.2f | Ages: %d",
+    paste0("Adherence Tests -- Table: <strong>%s</strong> ",
+           "| alpha = %.2f | Ages: %d",
            " | Exposed: %s | Observed: %d | Expected: %.1f | A/E: %.4f"),
     x$table_name, x$alpha, x$n_ages,
     format(x$total_exposed, big.mark = ","),
