@@ -1,4 +1,4 @@
-# mortalityAdherence <img src="man/logo.png" align="right" height="138" alt="mortalityAdherence logo" />
+# mortalityAdherence <img src="logo.png" align="right" height="138" alt="mortalityAdherence logo" />
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/yourusername/mortalityAdherence/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/yourusername/mortalityAdherence/actions/workflows/R-CMD-check.yaml)
@@ -24,7 +24,9 @@ for actuarial reports and regulatory submissions.
 install.packages(c("MASS", "car", "sfsmisc"))
 
 # Install from GitHub
-remotes::install_github("yourusername/mortalityAdherence")
+remotes::install_url(
+  "https://github.com/eduardoflm/mortalityAdherence/archive/refs/heads/main.zip"
+)
 
 # Optional extras (HTML output, Excel reading)
 install.packages(c("knitr", "kableExtra", "readxl"))
@@ -50,6 +52,7 @@ result <- testAdherence(fund_data, table = "AT-2000m", alpha = 0.05)
 
 # 4. Display results
 print(result)
+result$summary
 ```
 
 ---
