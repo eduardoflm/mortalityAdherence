@@ -114,7 +114,9 @@ loadTable <- function(name) {
 #'
 #' @param file \code{character} — path to the file. Supported formats:
 #'   \code{.csv}, \code{.xlsx}, \code{.xls}.
-#' @param col_age \code{character} — name of the age column in the file.
+#' @param col_year \code{character} — name of the year column, if present.
+#'   Default: \code{"year"}. Set to \code{NULL} to ignore a year column.
+#' @param col_age \code{character} — name of the age column.
 #'   Default: \code{"age"}.
 #' @param col_exposed \code{character} — name of the exposed lives column.
 #'   Default: \code{"exposed"}.
@@ -129,30 +131,58 @@ loadTable <- function(name) {
 #' @param ... Additional arguments passed to \code{utils::read.csv()} or
 #'   \code{readxl::read_excel()}.
 #'
-#' @return A \code{data.frame} with columns \code{age}, \code{exposed}, and
-#'   \code{deaths}, sorted by age. Rows with zero or missing exposure are
-#'   removed automatically.
+#' @return A \code{data.frame} with columns \code{year} (if found),
+#'   \code{age}, \code{exposed}, and \code{deaths}. Each row is one
+#'   cell (year-age combination). Rows with zero or missing exposure
+#'   are removed automatically.
 #'
 #' @details
-#' Reading Excel files (\code{.xlsx} or \code{.xls}) requires the
-#' \pkg{readxl} package:
-#' \code{install.packages("readxl")}.
+#' \strong{Expected data format — long (stacked) format:}
 #'
-#' For Brazilian CSV files (semicolon separator, comma decimal), use:
-#' \code{loadFundData("file.csv", sep = ";", dec = ",")}
+#' Each row must represent one year-age cell. For multi-year data, stack
+#' the years vertically — do \strong{not} spread years across columns.
+#'
+#' Correct long format:
+#' \preformatted{
+#'   year  age  exposed  deaths
+#'   2020   40      400       1
+#'   2020   41      410       1
+#'   2021   40      390       1
+#'   2021   41      450       2
+#' }
+#'
+#' If your data has only one year, a year column is optional:
+#' \preformatted{
+#'   age  exposed  deaths
+#'    40      400       1
+#'    41      410       1
+#' }
+#'
+#' \strong{Why long format matters:} each (year, age) cell is treated as an
+#' independent observation in the statistical tests, increasing test power
+#' proportionally to the number of years.
+#'
+#' Reading Excel files requires the \pkg{readxl} package:
+#' \code{install.packages("readxl")}.
 #'
 #' @examples
 #' \dontrun{
-#' # Standard CSV
+#' # Multi-year CSV with year column
 #' data <- loadFundData("experience.csv")
 #'
-#' # Brazilian-format CSV
-#' data <- loadFundData("experiencia.csv", sep = ";", dec = ",",
-#'                       col_age = "Idade", col_exposed = "Expostos",
-#'                       col_deaths = "Obitos")
+#' # Single-year CSV — year column optional
+#' data <- loadFundData("experience_2023.csv")
 #'
-#' # Excel file
-#' data <- loadFundData("fund_data.xlsx",
+#' # Brazilian-format CSV (semicolon separator, comma decimal)
+#' data <- loadFundData("experiencia.csv", sep = ";", dec = ",",
+#'                       col_year    = "Ano",
+#'                       col_age     = "Idade",
+#'                       col_exposed = "Expostos",
+#'                       col_deaths  = "Obitos")
+#'
+#' # Excel file, no year column
+#' data <- loadFundData("fund.xlsx",
+#'                       col_year    = NULL,
 #'                       col_age     = "FxEtaria",
 #'                       col_exposed = "ExpostoRisco",
 #'                       col_deaths  = "Mortes",
@@ -161,6 +191,7 @@ loadTable <- function(name) {
 #'
 #' @export
 loadFundData <- function(file,
+                          col_year    = "year",
                           col_age     = "age",
                           col_exposed = "exposed",
                           col_deaths  = "deaths",
@@ -189,7 +220,7 @@ loadFundData <- function(file,
     ))
   }
 
-  # Verify requested columns exist
+  # Verify required columns exist
   for (col in c(col_age, col_exposed, col_deaths)) {
     if (!col %in% names(raw))
       stop(sprintf(
@@ -198,26 +229,72 @@ loadFundData <- function(file,
       ))
   }
 
-  out <- data.frame(
-    age     = as.integer(raw[[col_age]]),
-    exposed = as.numeric(raw[[col_exposed]]),
-    deaths  = as.integer(raw[[col_deaths]]),
-    stringsAsFactors = FALSE
-  )
+  # Detect year column
+  has_year <- !is.null(col_year) && col_year %in% names(raw)
+
+  if (has_year) {
+    out <- data.frame(
+      year    = as.integer(raw[[col_year]]),
+      age     = as.integer(raw[[col_age]]),
+      exposed = as.numeric(raw[[col_exposed]]),
+      deaths  = as.integer(raw[[col_deaths]]),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    out <- data.frame(
+      age     = as.integer(raw[[col_age]]),
+      exposed = as.numeric(raw[[col_exposed]]),
+      deaths  = as.integer(raw[[col_deaths]]),
+      stringsAsFactors = FALSE
+    )
+    # Warn if ages repeat but no year column was found
+    if (anyDuplicated(out$age) > 0L) {
+      message(paste0(
+        "  [loadFundData] Repeated ages detected but no year column found",
+        if (!is.null(col_year))
+          sprintf(" (looked for '%s').", col_year)
+        else ".",
+        "\n  Each row will be treated as an independent cell.",
+        "\n  To make the structure explicit, add a year column and pass",
+        " col_year = 'your_year_column'."
+      ))
+    }
+  }
 
   # Remove invalid rows
   n_before <- nrow(out)
   out <- out[!is.na(out$age) & out$exposed > 0 & !is.na(out$deaths), ]
-  out <- out[order(out$age), ]
   n_removed <- n_before - nrow(out)
 
+  # Sort by year (if present) then age
+  if (has_year) {
+    out <- out[order(out$year, out$age), ]
+  } else {
+    out <- out[order(out$age), ]
+  }
+
+  n_years <- if (has_year) length(unique(out$year)) else
+             if (anyDuplicated(out$age) > 0L) max(tabulate(out$age)) else 1L
+
   message(sprintf(
-    "Fund data loaded: %d age group(s) | %s exposed | %d deaths%s",
+    "Fund data loaded: %d row(s) | %d unique age(s) | %s year(s) | %s exposed | %d deaths%s",
     nrow(out),
+    length(unique(out$age)),
+    if (has_year) as.character(n_years) else "unknown (no year column)",
     format(as.integer(sum(out$exposed)), big.mark = ","),
     sum(out$deaths),
-    if (n_removed > 0) sprintf(" | %d row(s) removed (zero/missing exposure)", n_removed) else ""
+    if (n_removed > 0)
+      sprintf(" | %d row(s) removed (zero/missing exposure)", n_removed)
+    else ""
   ))
+
+  if (!has_year && n_years == 1L) {
+    message(paste0(
+      "  [loadFundData] Single-year format detected.\n",
+      "  For multi-year data, use long format: one row per (year, age) cell,\n",
+      "  with a 'year' column — stacking all years vertically."
+    ))
+  }
 
   out
 }
