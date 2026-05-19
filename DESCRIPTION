@@ -1,0 +1,40 @@
+Package: mortalityAdherence
+Type: Package
+Title: Biometric Table Adherence Testing for Pension Funds
+Version: 0.1.0
+Authors@R: c(
+    person("Your", "Name", email = "your@email.com", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0000-0000-0000"))
+  )
+Description: Tools for actuaries to test the adherence of biometric mortality
+    tables to observed data from pension funds. Implements 11 statistical tests:
+    Kolmogorov-Smirnov (KS), Chi-Square, Wald Type I and II and Likelihood
+    Ratio Tests (LRT) Type I and II under both Poisson and Negative Binomial
+    models, and a Bayesian Credibility Interval test. Includes a built-in
+    database of 10 biometric tables used in the Brazilian actuarial market
+    (AT-2000bm, AT-2000m, AT-49M, AT-55m, AT-83ms, GAM71m, GAM83m,
+    BR-EMS2010, BR-EMS2015, BR-EMS2021), and functions for loading custom
+    tables, reading pension fund data, and displaying formatted results.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.0.0)
+Imports:
+    MASS (>= 7.3-0),
+    car (>= 3.0-0),
+    sfsmisc (>= 1.1-0),
+    stats,
+    tools,
+    utils
+Suggests:
+    knitr (>= 1.30),
+    kableExtra (>= 1.3.0),
+    readxl (>= 1.3.0),
+    ggplot2 (>= 3.3.0),
+    testthat (>= 3.0.0),
+    rmarkdown
+VignetteBuilder: knitr
+URL: https://github.com/yourusername/mortalityAdherence
+BugReports: https://github.com/yourusername/mortalityAdherence/issues

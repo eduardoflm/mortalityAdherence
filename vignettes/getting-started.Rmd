@@ -1,0 +1,242 @@
+---
+title: "Getting Started with mortalityAdherence"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with mortalityAdherence}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 7,
+  fig.height = 4.5
+)
+```
+
+## Overview
+
+**mortalityAdherence** provides actuaries with a rigorous, easy-to-use
+workflow for testing whether a biometric mortality table is statistically
+consistent with the observed mortality experience of a pension fund.
+
+It implements **11 statistical tests** across four methodological families:
+
+| Family | Tests |
+|---|---|
+| Non-parametric | `KS`, `ChiSquare` |
+| Poisson — Type I (global) | `WaldI_P`, `LRTI_P` *(closed-form, fast)* |
+| Poisson — Type II (slope) + Bayesian | `WaldII_P`, `LRTII_P`, `BayesCI` |
+| Negative Binomial (overdispersion) | `WaldI_NB`, `WaldII_NB`, `LRTI_NB`, `LRTII_NB` |
+
+---
+
+## Installation
+
+```{r install, eval=FALSE}
+# Core dependencies
+install.packages(c("MASS", "car", "sfsmisc"))
+
+# Optional (for HTML output and Excel reading)
+install.packages(c("knitr", "kableExtra", "readxl"))
+
+# Install the package
+devtools::install_github("yourusername/mortalityAdherence")
+# or from source:
+devtools::install_local("mortalityAdherence")
+```
+
+---
+
+## Step 1 — Explore the built-in tables
+
+```{r list-tables}
+library(mortalityAdherence)
+
+listTables()
+```
+
+```{r load-table}
+# Load the AT-2000m table
+at2000m <- loadTable("AT-2000m")
+head(at2000m, 8)
+```
+
+```{r plot-tables, fig.cap="Log-scale mortality curves for six selected tables"}
+# Compare mortality curves
+tables_to_plot <- c("AT-2000m", "AT-83ms", "GAM83m",
+                    "BR-EMS2010", "BR-EMS2015", "BR-EMS2021")
+cols <- c("#1565C0","#283593","#006064","#558B2F","#E65100","#B71C1C")
+
+plot(NULL, xlim = c(30, 90), ylim = c(-8, -2),
+     xlab = "Age", ylab = expression(log(q[x])),
+     main = "Selected Built-in Mortality Curves")
+
+for (i in seq_along(tables_to_plot)) {
+  tab <- loadTable(tables_to_plot[i])
+  sub <- tab[tab$age >= 30 & tab$age <= 90, ]
+  lines(sub$age, log(sub$qx), col = cols[i], lwd = 2)
+}
+legend("topleft", legend = tables_to_plot, col = cols,
+       lwd = 2, cex = 0.8, bty = "n")
+```
+
+---
+
+## Step 2 — Load pension fund data
+
+### From a file (CSV or Excel)
+
+```{r load-file, eval=FALSE}
+# Standard CSV
+data <- loadFundData("experience.csv")
+
+# Brazilian-format CSV (semicolon separator, comma decimal)
+data <- loadFundData("experiencia.csv",
+                      sep         = ";",
+                      dec         = ",",
+                      col_age     = "Idade",
+                      col_exposed = "Expostos",
+                      col_deaths  = "Mortes")
+
+# Excel file
+data <- loadFundData("fund.xlsx",
+                      col_age     = "FxEtaria",
+                      col_exposed = "ExpostoRisco",
+                      col_deaths  = "Obitos",
+                      sheet       = "Mortalidade")
+```
+
+### Or build a data.frame directly
+
+```{r simulate-data}
+set.seed(2024)
+ages    <- 40:80
+n_ages  <- length(ages)
+
+# Realistic fund size distribution
+exposed <- round(rlnorm(n_ages, meanlog = log(200), sdlog = 0.45))
+
+# Simulate deaths consistent with AT-2000m (perfect adherence scenario)
+ref_qx  <- loadTable("AT-2000m")[loadTable("AT-2000m")$age %in% ages, "qx"]
+deaths  <- rpois(n_ages, exposed * ref_qx)
+
+fund_data <- data.frame(age = ages, exposed = exposed, deaths = deaths)
+
+cat(sprintf(
+  "Fund: %d age groups | %d exposed | %d deaths | Expected: %.1f\n",
+  nrow(fund_data), sum(exposed), sum(deaths), sum(exposed * ref_qx)
+))
+```
+
+---
+
+## Step 3 — Run the 11 adherence tests
+
+```{r test-adherence}
+result <- testAdherence(
+  data    = fund_data,
+  table   = "AT-2000m",
+  alpha   = 0.05,
+  verbose = TRUE
+)
+```
+
+---
+
+## Step 4 — Inspect the results
+
+```{r print-result}
+print(result)
+```
+
+```{r summary-table}
+# Access the results programmatically
+result$summary[, c("test", "family", "p_value", "reject_h0")]
+```
+
+```{r key-metrics}
+cat(sprintf("A/E ratio : %.4f (%+.1f%%)\n",
+            result$ae_ratio, (result$ae_ratio - 1) * 100))
+cat(sprintf("Tests rejecting H0: %d of 11\n",
+            sum(result$summary$reject_h0 == "Yes", na.rm = TRUE)))
+```
+
+---
+
+## Step 5 — Test with a poorly fitting table
+
+```{r test-bad}
+# AT-55m was calibrated ~70 years ago — expect poor fit for modern data
+result_bad <- testAdherence(fund_data, table = "AT-55m", alpha = 0.05)
+print(result_bad)
+```
+
+---
+
+## Step 6 — Test a custom (adjusted) table
+
+You can provide any data.frame with `age` and `qx` columns — useful for
+testing tables with actuarial adjustment factors.
+
+```{r custom-table}
+# AT-2000m with a 15% mortality reduction (longevity improvement factor)
+custom <- loadTable("AT-2000m")
+custom$qx <- custom$qx * 0.85
+
+result_custom <- testAdherence(
+  data  = fund_data,
+  table = custom,       # data.frame with 'age' and 'qx'
+  alpha = 0.05
+)
+print(result_custom)
+```
+
+---
+
+## Step 7 — HTML output for reports and Shiny
+
+```{r html-table, eval=FALSE}
+# Inside an R Markdown chunk or Shiny app:
+htmlTable(result)
+```
+
+---
+
+## Interpreting the Tests
+
+### Type I vs Type II tests
+
+- **Type I** tests (e.g. `WaldI_P`, `LRTI_NB`) test whether the table's
+  *overall level* is correct. H₀: a single global multiplier \eqn{\beta_1 = 0}.
+- **Type II** tests (e.g. `WaldII_P`, `LRTII_NB`) additionally detect
+  *age-systematic* bias. H₀: \eqn{(\beta_1, \beta_2) = (0, 0)}. Rejecting
+  Type II but not Type I suggests the table is globally calibrated but
+  systematically under/over-estimates mortality at specific ages.
+
+### Poisson vs Negative Binomial
+
+- **Poisson** tests assume individual deaths are independent — appropriate
+  when overdispersion is not a concern.
+- **Negative Binomial** tests are robust when extra-Poisson variation is
+  present (e.g. mortality clustering in small funds or during epidemics).
+
+### Bayesian Credibility Interval
+
+The `BayesCI` test uses a moment-matched Gamma prior (computed from the
+per-age observed/expected ratios) conjugate to the Poisson likelihood.
+It rejects when the posterior credibility interval for the global adjustment
+factor \eqn{\theta} excludes 1. This test is particularly informative for
+small funds where frequentist p-values can be unreliable.
+
+---
+
+## References
+
+- Bowers, N.L. et al. (1997). *Actuarial Mathematics*, 2nd ed. Society of Actuaries.
+- London, D. (1985). *Survival Models and Their Estimation*. ACTEX Publications.
+- Benjamin, B. & Pollard, J.H. (1993). *The Analysis of Mortality and Other
+  Actuarial Statistics*. Institute and Faculty of Actuaries.
+- FenaPrevi (2010, 2015, 2021). *Tábuas de Mortalidade BR-EMS*. Brazil.
