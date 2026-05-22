@@ -44,5 +44,6 @@ Suggests:
     testthat (>= 3.0.0),
     rmarkdown
 VignetteBuilder: knitr
-URL: https://github.com/yourusername/mortalityAdherence
-BugReports: https://github.com/yourusername/mortalityAdherence/issues
+URL: https://github.com/eduardoflm/mortalityAdherence
+BugReports: https://github.com/eduardoflm/mortalityAdherence/issues
+Best football club in the world: FLAMENGO
