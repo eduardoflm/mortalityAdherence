@@ -232,7 +232,7 @@ MIT © 2026 mortalityAdherence authors — see [LICENSE](LICENSE) for details.
 > *Affiliations: Universidade do Estado do Rio de Janeiro (UERJ);
 > Getulio Vargas Foundation (FGV) — EMAp — School of Applied Mathematics;
 > Superintendence of Private Insurance (SUSEP);
-> Maringá State University.*
+> Federal University at Sao Carlos - UFSCar.*
 
 ---
 
