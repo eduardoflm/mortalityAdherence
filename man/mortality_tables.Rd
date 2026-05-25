@@ -8,16 +8,16 @@
 A \code{data.frame} with 121 rows (ages 0 to 120) and 11 columns:
 \describe{
   \item{\code{age}}{Integer age from 0 to 120.}
-  \item{\code{AT-2000bm}}{American Table 2000, Male Beneficiaries (SOA).}
+  \item{\code{AT-2000bm}}{American Table 2000, Male Basic (SOA).}
   \item{\code{AT-2000m}}{American Table 2000, Male (SOA).}
   \item{\code{AT-49M}}{American Table 1949, Male.}
   \item{\code{AT-55m}}{American Table 1955, Male.}
   \item{\code{AT-83ms}}{American Table 1983, Male (smoothed).}
   \item{\code{GAM71m}}{Group Annuity Mortality Table 1971, Male (SOA).}
   \item{\code{GAM83m}}{Group Annuity Mortality Table 1983, Male (SOA).}
-  \item{\code{BR-EMS2010}}{Brazilian Mortality Experience 2010 (FenaPrevi/SUSEP).}
-  \item{\code{BR-EMS2015}}{Brazilian Mortality Experience 2015 (FenaPrevi/SUSEP).}
-  \item{\code{BR-EMS2021}}{Brazilian Mortality Experience 2021 (FenaPrevi/SUSEP).}
+  \item{\code{BR-EMS2010}}{Brazilian Insur. Mortality Experience 2010 (FenaPrevi/SUSEP).}
+  \item{\code{BR-EMS2015}}{Brazilian Insur. Mortality Experience 2015 (FenaPrevi/SUSEP).}
+  \item{\code{BR-EMS2021}}{Brazilian Insur. Mortality Experience 2021 (FenaPrevi/SUSEP).}
 }
 }
 \source{
