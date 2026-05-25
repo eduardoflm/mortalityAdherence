@@ -7,10 +7,10 @@
 [![R version](https://img.shields.io/badge/R-%3E%3D4.0.0-blue)](https://www.r-project.org/)
 <!-- badges: end -->
 
-> **Biometric Table Adherence Testing for Pension Funds**
+> **Statistical Validation of Mortality/Annuity Tables for Pension Funds**
 
 `mortalityAdherence` is an R package for actuaries who need to assess whether a
-biometric mortality table is statistically consistent with the observed experience
+biometric mortality/annuity table is statistically consistent with the observed experience
 data of a pension fund. It implements **11 statistical tests**, ships with
 **10 built-in mortality tables**, and produces clean, formatted results suitable
 for actuarial reports and regulatory submissions.
@@ -21,7 +21,7 @@ for actuarial reports and regulatory submissions.
 
 ```r
 # Install dependencies
-install.packages(c("MASS", "car", "sfsmisc"))
+install.packages(c("MASS", "car", "sfsmisc", "remotes"))
 
 # Install from GitHub
 remotes::install_url(
@@ -65,12 +65,12 @@ result$summary
 ├──────────────────────┬──────────────────────────────────────────┤
 │ Non-parametric       │  KS  ·  ChiSquare                        │
 ├──────────────────────┼──────────────────────────────────────────┤
-│ Poisson — Type I     │  WaldI_P  ·  LRTI_P  (closed-form)      │
-│ Poisson — Type II    │  WaldII_P  ·  LRTII_P  (GLM + slope)    │
+│ Poisson — Type I     │  WaldI_P  ·  LRTI_P  (closed-form)       │
+│ Poisson — Type II    │  WaldII_P  ·  LRTII_P  (GLM + slope)     │
 │ Bayesian             │  BayesCI  (Gamma-Poisson conjugate)      │
 ├──────────────────────┼──────────────────────────────────────────┤
 │ Negative Binomial    │  WaldI_NB  ·  WaldII_NB                  │
-│ (overdispersion)     │  LRTI_NB  ·  LRTII_NB                   │
+│ (overdispersion)     │  LRTI_NB  ·  LRTII_NB                    │
 └──────────────────────┴──────────────────────────────────────────┘
 ```
 
@@ -92,16 +92,16 @@ shows mortality clustering, or when the Poisson dispersion test is significant.
 
 | Table | Description |
 |---|---|
-| `AT-2000bm` | American Table 2000 — Male Beneficiaries (SOA) |
+| `AT-2000bm` | American Table 2000 — Male Basic (SOA) |
 | `AT-2000m`  | American Table 2000 — Male (SOA) |
 | `AT-49M`    | American Table 1949 — Male |
 | `AT-55m`    | American Table 1955 — Male |
 | `AT-83ms`   | American Table 1983 — Male (smoothed) |
 | `GAM71m`    | Group Annuity Mortality 1971 — Male (SOA) |
 | `GAM83m`    | Group Annuity Mortality 1983 — Male (SOA) |
-| `BR-EMS2010`| Brazilian Mortality Experience 2010 (FenaPrevi) |
-| `BR-EMS2015`| Brazilian Mortality Experience 2015 (FenaPrevi) |
-| `BR-EMS2021`| Brazilian Mortality Experience 2021 (FenaPrevi) |
+| `BR-EMS2010`| Brazilian Insur. Mortality Experience 2010 |
+| `BR-EMS2015`| Brazilian Insur. Mortality Experience 2015 |
+| `BR-EMS2021`| Brazilian Insur. Mortality Experience 2021 |
 
 All tables cover ages **0 – 120** and express annual death probabilities \(q_x\).
 
