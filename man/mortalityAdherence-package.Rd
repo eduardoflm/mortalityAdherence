@@ -4,10 +4,10 @@
 \name{mortalityAdherence-package}
 \alias{mortalityAdherence-package}
 \alias{mortalityAdherence}
-\title{mortalityAdherence: Biometric Table Adherence Testing for Pension Funds}
+\title{mortalityAdherence: Annuity/Mortality Table Adherence Testing for Pension Funds}
 \description{
 The \pkg{mortalityAdherence} package provides actuaries with a complete
-toolkit for testing whether a biometric mortality table is statistically
+toolkit for testing whether a biometric annuity/mortality table is statistically
 adherent to observed pension fund experience data.
 }
 \details{
@@ -54,7 +54,7 @@ Useful links:
 Authors:
 \itemize{
   \item Eduardo Fraga L. de Melo (UERJ / FGV-EMAp / SUSEP)
-  \item Helton Graziadei (Maringa State University)
+  \item Helton Graziadei (Federal University at Sao Carlos - UFSCar)
   \item Rodrigo Targino (FGV-EMAp)
 }
 }
