@@ -1,0 +1,8 @@
+^python$
+^\.github$
+^data-raw$
+^logo\.png$
+^adherence\.R$
+^LICENSE\.md$
+^.*\.Rproj$
+^\.Rproj\.user$
