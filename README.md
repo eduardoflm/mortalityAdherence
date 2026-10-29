@@ -17,7 +17,21 @@ for actuarial reports and regulatory submissions.
 
 ---
 
-## Installation
+## Python version
+
+The same 11 tests are also available in **Python** (folder [`python/`](python/)), with the
+same function names. No R or Git needed:
+
+```bash
+pip install "mortalityAdherence @ https://github.com/eduardoflm/mortalityAdherence/archive/refs/heads/main.zip#subdirectory=python"
+```
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/eduardoflm/mortalityAdherence/blob/main/python/examples/quickstart.ipynb)
+— try it in the browser, without installing anything. See [`python/README.md`](python/README.md).
+
+---
+
+## Installation (R)
 
 ```r
 # Install dependencies

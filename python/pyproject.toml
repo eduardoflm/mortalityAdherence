@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mortalityAdherence"
+version = "0.1.0"
+description = "Statistical validation of mortality/annuity tables for pension funds: 11 goodness-of-fit tests (Python version of the R package)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  {name = "Eduardo Fraga L. de Melo", email = "eduardofraga@ime.uerj.br"},
+  {name = "Helton Graziadei"},
+  {name = "Rodrigo Targino"},
+]
+keywords = ["actuarial", "mortality", "annuity table", "pension funds",
+            "goodness-of-fit", "negative binomial", "poisson"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+  "numpy>=1.21",
+  "scipy>=1.7",
+  "pandas>=1.3",
+  "openpyxl>=3.0",
+]
+
+[project.optional-dependencies]
+xls = ["xlrd>=2.0"]
+test = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/eduardoflm/mortalityAdherence"
+Paper = "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6668699"
+Issues = "https://github.com/eduardoflm/mortalityAdherence/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mortalityAdherence = ["data/*.csv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
