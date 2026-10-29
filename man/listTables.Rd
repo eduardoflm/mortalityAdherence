@@ -7,27 +7,14 @@
 listTables()
 }
 \value{
-A \code{data.frame} with four columns:
-\describe{
-  \item{\code{name}}{Table identifier -- pass this string to
-    \code{\link{loadTable}()} or \code{\link{testAdherence}()}.}
-  \item{\code{description}}{Full descriptive name of the table.}
-  \item{\code{origin}}{Country and source organisation.}
-  \item{\code{age_range}}{Age range covered (0 to 120 for all tables).}
-}
+A \code{data.frame} with columns \code{name} (to pass to
+  \code{\link{loadTable}()} or \code{\link{testAdherence}()}),
+  \code{description}, \code{origin} and \code{age_range}.
 }
 \description{
-Returns a data frame describing the 10 biometric mortality tables
-built into the \pkg{mortalityAdherence} package.
+Returns a data frame describing the 10 mortality tables built into the
+package.
 }
 \examples{
 listTables()
-
-# Filter to Brazilian tables only
-lt <- listTables()
-lt[grepl("Brazilian", lt$description), ]
-
-}
-\seealso{
-\code{\link{loadTable}}, \code{\link{testAdherence}}
 }

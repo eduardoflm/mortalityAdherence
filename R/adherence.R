@@ -1,505 +1,539 @@
 # =============================================================================
-# SECTION 2 — MAIN EXPORTED FUNCTION: testAdherence()
+# Main exported functions: testAdherence(), printResult(), htmlTable(),
+# exportExcel(). Output strings are identical to the Python version.
 # =============================================================================
+
+.TEST_ORDER <- c("KS", "ChiSquare",
+                 "WaldI_P", "WaldII_P", "LRTI_P", "LRTII_P", "BayesCI",
+                 "WaldI_NB", "WaldII_NB", "LRTI_NB", "LRTII_NB")
+
+.DESCRIPTIONS <- c(
+  KS = "Kolmogorov-Smirnov",
+  ChiSquare = "Chi-Square Goodness-of-Fit",
+  WaldI_P = "Wald Type I (Poisson)",
+  WaldII_P = "Wald Type II - age slope (Poisson)",
+  LRTI_P = "LRT Type I (Poisson)",
+  LRTII_P = "LRT Type II - age slope (Poisson)",
+  BayesCI = "Bayesian Credible Interval",
+  WaldI_NB = "Wald Type I (Negative Binomial)",
+  WaldII_NB = "Wald Type II - age slope (Neg. Binomial)",
+  LRTI_NB = "LRT Type I (Negative Binomial)",
+  LRTII_NB = "LRT Type II - age slope (Neg. Binomial)")
+
+.FAMILIES <- c(KS = "Non-parametric", ChiSquare = "Non-parametric",
+               WaldI_P = "Poisson", WaldII_P = "Poisson", LRTI_P = "Poisson",
+               LRTII_P = "Poisson", BayesCI = "Bayesian",
+               WaldI_NB = "Negative Binomial", WaldII_NB = "Negative Binomial",
+               LRTI_NB = "Negative Binomial", LRTII_NB = "Negative Binomial")
+
+.H0 <- c(KS = "CDF match", ChiSquare = "Obs = Exp",
+         WaldI_P = "beta1 = 0", WaldII_P = "(beta1,beta2) = 0",
+         LRTI_P = "beta1 = 0", LRTII_P = "(beta1,beta2) = 0",
+         BayesCI = "theta in CI",
+         WaldI_NB = "beta1 = 0", WaldII_NB = "(beta1,beta2) = 0",
+         LRTI_NB = "beta1 = 0", LRTII_NB = "(beta1,beta2) = 0")
+
 
 #' Test the Adherence of a Mortality Table to Pension Fund Data
 #'
-#' Applies all 11 statistical adherence tests to observed pension fund
-#' mortality data, comparing against a reference biometric table.
+#' Runs the 11 goodness-of-fit tests of de Melo, Graziadei & Targino (2026)
+#' comparing the observed mortality of a pension fund with a reference
+#' (fixed) mortality / annuity table.
 #'
-#' @param data \code{data.frame} with the pension fund experience data.
-#'   Required columns:
-#'   \itemize{
-#'     \item \code{age}      — participant age (integer)
-#'     \item \code{exposed}  — number of lives exposed to the risk of death
-#'     \item \code{deaths}   — number of observed deaths
-#'   }
-#' @param table Either a \code{character} string naming a built-in table
-#'   (see \code{\link{listTables}()}), or a \code{data.frame} with columns
-#'   \code{age} and \code{qx} (annual probability of death) for a custom table.
-#' @param alpha \code{numeric} — significance level for all tests. Default: \code{0.05}.
-#' @param verbose \code{logical} — if \code{TRUE}, prints progress messages.
-#'   Default: \code{FALSE}.
+#' @param data \code{data.frame} with columns \code{age}, \code{exposed},
+#'   \code{deaths} and, optionally, \code{year}, in \strong{long format}: one
+#'   row per (year, age) cell, with the years stacked one below the other.
+#'   Without a \code{year} column, repeated ages are treated as stacked years
+#'   (additional cells). Years are never aggregated.
+#' @param table Name of a built-in table (see \code{\link{listTables}()}) or a
+#'   \code{data.frame} with columns \code{age} and \code{qx} (an external,
+#'   loaded or deloaded table).
+#' @param alpha Significance level (default 0.05).
+#' @param verbose If \code{TRUE}, prints progress information.
+#' @param quiet If \code{TRUE}, suppresses the informative messages (they are
+#'   kept in \code{result$messages}).
+#' @param skip_nb_if_no_overdispersion If \code{TRUE} (default) the Negative
+#'   Binomial tests are skipped when the dispersion ratio is <= 1.
+#' @param chisq_df Degrees of freedom of the chi-squared test: \code{"k-1"}
+#'   (default; convention of practice, used in the paper) or \code{"k"}
+#'   (correct reference distribution for a fixed table; paper Sec. 2.1).
 #'
-#' @return An object of class \code{adherence_result} (a named list) with:
+#' @return An object of class \code{adherence_result}, a list with:
 #' \describe{
-#'   \item{\code{$summary}}{A \code{data.frame} with one row per test showing
-#'     the test name, family, test statistic, p-value, and rejection decision.}
-#'   \item{\code{$details}}{Named list with the full output of each individual test.}
-#'   \item{\code{$data_used}}{The merged data frame actually used in the analysis.}
-#'   \item{\code{$table_name}}{Name of the mortality table tested against.}
-#'   \item{\code{$alpha}}{Significance level used.}
-#'   \item{\code{$n_ages}}{Number of age groups analysed.}
-#'   \item{\code{$total_exposed}}{Total number of exposed lives.}
-#'   \item{\code{$observed_deaths}}{Total number of observed deaths.}
-#'   \item{\code{$expected_deaths}}{Total expected deaths under the tested table.}
-#'   \item{\code{$ae_ratio}}{Actual-to-Expected (A/E) deaths ratio.}
+#'   \item{\code{summary}}{\code{data.frame}, one row per test: \code{test},
+#'     \code{description}, \code{family}, \code{h0}, \code{df},
+#'     \code{statistic}, \code{p_value}, \code{reject_h0} ("Yes", "No" or
+#'     "N/A") and \code{note}.}
+#'   \item{\code{details}}{Full output of each test (e.g. Bayesian CI bounds,
+#'     estimated \eqn{\phi} of the NB models).}
+#'   \item{\code{data_used}}{The cells analysed, with \code{qx} and
+#'     \code{expected} = exposed x qx.}
+#'   \item{\code{table_name}, \code{alpha}, \code{n_cells}, \code{n_ages},
+#'     \code{n_years}}{Description of the analysis.}
+#'   \item{\code{total_exposed}, \code{observed_deaths}, \code{expected_deaths}}{
+#'     Totals (\eqn{D} and \eqn{Q}).}
+#'   \item{\code{ae_ratio}}{\eqn{D/Q}, the version I deflator estimate.}
+#'   \item{\code{dispersion_ratio}}{Pearson \eqn{\chi^2}/df of the
+#'     intercept-only Poisson model.}
+#'   \item{\code{min_detectable}}{Smallest deflators detectable with 80\% power
+#'     by the version I tests (paper, eq. 17).}
+#'   \item{\code{messages}}{Informative messages produced by the analysis.}
 #' }
 #'
 #' @details
-#' \strong{The 11 tests:}
-#' \describe{
-#'   \item{\code{KS}}{Kolmogorov-Smirnov: compares the empirical cumulative
-#'     distribution of observed deaths with the table-implied distribution.
-#'     Uses the exact critical value from \code{sfsmisc::KSd()}.}
-#'   \item{\code{ChiSquare}}{Chi-Square goodness-of-fit across all age groups.}
-#'   \item{\code{WaldI_P}}{Wald Type I under Poisson: tests whether the overall
-#'     log-scale adjustment \eqn{\beta_1 = 0}. Closed-form (no GLM required).}
-#'   \item{\code{WaldII_P}}{Wald Type II under Poisson: jointly tests intercept
-#'     and age-slope \eqn{(\beta_1, \beta_2) = (0,0)} via Poisson GLM.}
-#'   \item{\code{LRTI_P}}{Likelihood Ratio Test Type I under Poisson.}
-#'   \item{\code{LRTII_P}}{Likelihood Ratio Test Type II under Poisson GLM
-#'     (2 degrees of freedom).}
-#'   \item{\code{BayesCI}}{Bayesian Credibility Interval: Gamma-Poisson conjugate
-#'     prior; rejects if the interval for the global adjustment factor excludes 1.}
-#'   \item{\code{WaldI_NB}}{Wald Type I under Negative Binomial — robust to
-#'     overdispersion.}
-#'   \item{\code{WaldII_NB}}{Wald Type II under Negative Binomial.}
-#'   \item{\code{LRTI_NB}}{Likelihood Ratio Test Type I under Negative Binomial.}
-#'   \item{\code{LRTII_NB}}{Likelihood Ratio Test Type II under Negative Binomial.}
-#' }
+#' \strong{The 11 tests.}
+#' \code{KS} is computed on the age margins (paper, eq. 2) with the 5\%
+#' critical value of \code{sfsmisc::KSd}; note that the KS statistic is
+#' invariant to the overall level of mortality (Sec. 3.6).
+#' \code{ChiSquare} uses all cells (eq. 1).
+#' Version I tests (\code{WaldI_P}, \code{LRTI_P}, \code{BayesCI},
+#' \code{WaldI_NB}, \code{LRTI_NB}) test a constant deflator,
+#' \eqn{H_0: \beta = 0}; version II tests (\code{WaldII_P}, \code{LRTII_P},
+#' \code{WaldII_NB}, \code{LRTII_NB}) test a deflator linear in standardised
+#' age, \eqn{H_0: \beta_1 = \beta_2 = 0}, with the joint \eqn{\chi^2_2}
+#' statistic. Negative Binomial models estimate \eqn{\phi} jointly with
+#' \eqn{\beta} (profile likelihood). For \code{BayesCI} the value in
+#' \code{p_value} is the posterior tail probability \eqn{\pi} (eq. 10), not a
+#' frequentist p-value.
 #'
-#' Type I tests detect \emph{global} over- or under-estimation by the table.
-#' Type II tests additionally detect \emph{age-systematic} deviations
-#' (e.g. the table underestimates young-age mortality while overestimating
-#' old-age mortality). Negative Binomial tests are particularly useful when
-#' individual mortality events exhibit clustering or extra-Poisson variation.
+#' \strong{Samples without deaths (D = 0).} The Wald tests (versions I and II,
+#' Poisson and Negative Binomial) are not applicable and are reported as
+#' "N/A" (paper, Sec. 3.5). The LRT tests remain valid, with statistic 2Q.
+#'
+#' The same function, with the same results, is available in the Python
+#' version of the package.
+#'
+#' @references de Melo, E.F.L., Graziadei, H. & Targino, R. (2026).
+#'   Annuity Table Validation in Pension Funds: A Comparative Power Analysis
+#'   of Goodness-of-Fit Tests. SSRN 6668699.
 #'
 #' @seealso \code{\link{listTables}}, \code{\link{loadTable}},
-#'   \code{\link{loadFundData}}, \code{\link{printResult}}, \code{\link{htmlTable}}
+#'   \code{\link{loadFundData}}, \code{\link{printResult}},
+#'   \code{\link{htmlTable}}, \code{\link{exportExcel}}
 #'
 #' @examples
-#' # --- Simulate pension fund data ---
 #' set.seed(42)
-#' ages     <- 40:80
-#' exposed  <- round(rlnorm(length(ages), meanlog = 5, sdlog = 0.4))
-#' ref_qx   <- loadTable("AT-2000m")[loadTable("AT-2000m")$age %in% ages, "qx"]
-#' obs_deaths <- rpois(length(ages), exposed * ref_qx)
+#' ages <- 40:80
+#' tab  <- loadTable("AT-2000m")
+#' qx   <- tab$qx[match(ages, tab$age)]
+#' fund <- do.call(rbind, lapply(2021:2023, function(y) {
+#'   E <- round(rlnorm(length(ages), 5, 0.4))
+#'   data.frame(year = y, age = ages, exposed = E, deaths = rpois(length(ages), E * qx))
+#' }))
+#' result <- testAdherence(fund, table = "AT-2000m")
+#' result
+#' result$summary
 #'
-#' fund_data <- data.frame(age = ages, exposed = exposed, deaths = obs_deaths)
+#' # A deloaded table (10% lower mortality)
+#' tab$qx <- tab$qx * 0.90
+#' testAdherence(fund, table = tab, quiet = TRUE)
 #'
-#' # --- Test adherence ---
-#' result <- testAdherence(fund_data, table = "AT-2000m", alpha = 0.05)
-#' print(result)
-#'
+#' # No deaths: Wald tests are reported as N/A
+#' zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+#' testAdherence(zero, "AT-2000m", quiet = TRUE)
 #' @export
-testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE) {
-
-  # --- Input validation ---------------------------------------------------
-  if (!is.data.frame(data))
-    stop("'data' must be a data.frame.")
-
-  required_cols <- c("age", "exposed", "deaths")
-  missing_cols  <- setdiff(required_cols, names(data))
-  if (length(missing_cols) > 0)
-    stop(paste0(
-      "Missing column(s) in 'data': ", paste(missing_cols, collapse = ", "),
-      "\nRequired columns: age, exposed, deaths",
-      "\nOptional column : year (for multi-year data in long format)"
-    ))
-
-  if (any(data$exposed < 0, na.rm = TRUE))
-    stop("'exposed' cannot contain negative values.")
-  if (any(data$deaths  < 0, na.rm = TRUE))
-    stop("'deaths' cannot contain negative values.")
-  if (alpha <= 0 || alpha >= 1)
-    stop("'alpha' must be strictly between 0 and 1.")
-
-  # --- Detect data structure (single year vs multi-year long format) -------
-  has_year_col   <- "year" %in% names(data)
-  has_repeat_age <- anyDuplicated(data$age) > 0L
-
-  if (has_year_col) {
-    n_years <- length(unique(data$year))
-    message(sprintf(paste0(
-      "  [Data format] 'year' column detected: %d year(s) found.\n",
-      "  Each (year, age) row is treated as an independent cell in all tests.\n",
-      "  Expected data structure: long format with one row per year-age combination."
-    ), n_years))
-  } else if (has_repeat_age) {
-    n_rows_per_age <- max(tabulate(data$age))
-    message(sprintf(paste0(
-      "  [Data format] Repeated ages detected (up to %d rows per age) ",
-      "but no 'year' column found.\n",
-      "  Treating each row as an independent observation (multi-year long format).\n",
-      "  Tip: add a 'year' column to make the data structure explicit."
-    ), n_rows_per_age))
-  } else {
-    message(paste0(
-      "  [Data format] Single-year data detected (each age appears once).\n",
-      "  For multi-year data, supply one row per (year, age) combination ",
-      "in long format,\n  optionally with a 'year' column."
-    ))
+testAdherence <- function(data, table, alpha = 0.05, verbose = FALSE, quiet = FALSE,
+                          skip_nb_if_no_overdispersion = TRUE, chisq_df = "k-1") {
+  msgs <- character(0)
+  say <- function(txt) {
+    msgs <<- c(msgs, txt)
+    if (!quiet) message(txt)
   }
 
-  # --- Load the mortality table -------------------------------------------
-  table_name <- "Custom"
+  # ---- validation ------------------------------------------------------------
+  if (!is.data.frame(data)) stop("'data' must be a data.frame.")
+  missing_cols <- setdiff(c("age", "exposed", "deaths"), names(data))
+  if (length(missing_cols) > 0)
+    stop(paste0("Missing column(s) in 'data': ", paste(missing_cols, collapse = ", "),
+                "\nRequired columns: age, exposed, deaths",
+                "\nOptional column : year (for multi-year data in long format)"))
+  if (!(alpha > 0 && alpha < 1)) stop("'alpha' must be strictly between 0 and 1.")
+  if (!chisq_df %in% c("k-1", "k")) stop("'chisq_df' must be 'k-1' or 'k'.")
+
+  cols <- c("age", "exposed", "deaths", if ("year" %in% names(data)) "year")
+  df <- as.data.frame(lapply(data[cols], function(v) suppressWarnings(as.numeric(v))))
+  na_rows <- !stats::complete.cases(df)
+  if (any(na_rows)) {
+    df <- df[!na_rows, , drop = FALSE]
+    say(sprintf("  [Data] %d row(s) with missing values removed.", sum(na_rows)))
+  }
+  if (any(df$exposed < 0)) stop("'exposed' cannot contain negative values.")
+  if (any(df$deaths < 0)) stop("'deaths' cannot contain negative values.")
+  if (any(abs(df$deaths - round(df$deaths)) > 1e-8))
+    say("  [Data] 'deaths' contains non-integer values; they were rounded.")
+  df$deaths <- round(df$deaths)
+  df$age <- as.integer(df$age)
+
+  # ---- data structure ----------------------------------------------------------
+  has_year <- "year" %in% names(df)
+  repeated <- anyDuplicated(df$age) > 0
+  if (has_year) {
+    n_years <- length(unique(df$year))
+    say(sprintf(paste0("  [Data format] 'year' column detected: %d year(s). ",
+                       "Each (year, age) row is an independent cell."), n_years))
+    if (anyDuplicated(df[c("year", "age")]) > 0)
+      say(paste0("  [Data format] WARNING: some (year, age) pairs appear more than ",
+                 "once; each row is still treated as a separate cell."))
+  } else if (repeated) {
+    n_years <- max(table(df$age))
+    say(sprintf(paste0("  [Data format] Repeated ages detected (up to %d rows per age) ",
+                       "and no 'year' column: rows are treated as stacked years ",
+                       "(independent cells). Tip: add a 'year' column."), n_years))
+  } else {
+    n_years <- 1L
+    say(paste0("  [Data format] Single-year data (each age appears once). For several ",
+               "years, stack them in long format, one row per (year, age)."))
+  }
+
+  # ---- table ---------------------------------------------------------------------
   if (is.character(table)) {
-    if (length(table) != 1L)
-      stop("'table' must be a single table name. Use listTables() to see options.")
+    if (length(table) != 1L) stop("'table' must be a single table name.")
     table_name <- table
-    table_df   <- loadTable(table)
+    tab <- loadTable(table)
   } else if (is.data.frame(table)) {
     if (!all(c("age", "qx") %in% names(table)))
-      stop("When 'table' is a data.frame it must have columns 'age' and 'qx'.")
-    table_df <- table
+      stop("A custom 'table' must have columns 'age' and 'qx'.")
+    table_name <- "Custom"
+    tab <- data.frame(age = as.integer(table$age), qx = as.numeric(table$qx))
+    if (any(tab$qx < 0 | tab$qx > 1, na.rm = TRUE))
+      stop("Custom table: 'qx' must lie in [0, 1].")
+    if (anyDuplicated(tab$age) > 0) stop("Custom table: each age must appear only once.")
   } else {
-    stop("'table' must be a character name or a data.frame with columns 'age' and 'qx'.")
+    stop("'table' must be a table name or a data.frame with 'age' and 'qx'.")
   }
 
-  # --- Merge each row with its qx (one row = one cell, no aggregation) ----
-  data$age     <- as.integer(data$age)
-  table_df$age <- as.integer(table_df$age)
-
-  merged <- merge(data, table_df[, c("age", "qx")], by = "age", all.x = FALSE)
-  merged <- merged[merged$exposed > 0, ]
-
-  # Sort by year (if present) then age, so cells are in chronological order
-  if (has_year_col) {
-    merged <- merged[order(merged$year, merged$age), ]
-  } else {
-    merged <- merged[order(merged$age), ]
-  }
-
+  # ---- one row = one cell (no aggregation) -------------------------------------------
+  lost <- sort(setdiff(unique(df$age), tab$age))
+  if (length(lost) > 0)
+    say(paste0("  [Data] Ages not found in the table were dropped: [",
+               paste(lost, collapse = ", "), "]"))
+  merged <- df
+  merged$qx <- tab$qx[match(merged$age, tab$age)]
+  merged <- merged[!is.na(merged$qx) & merged$exposed > 0 & merged$qx > 0, , drop = FALSE]
+  ord <- if (has_year) order(merged$year, merged$age) else order(merged$age)
+  merged <- merged[ord, , drop = FALSE]
+  rownames(merged) <- NULL
   if (nrow(merged) < 3L)
-    stop(paste0(
-      "Fewer than 3 valid cells after merging with the mortality table. ",
-      "Check that the ages in 'data' overlap with the table's age range."
-    ))
+    stop(paste0("Fewer than 3 valid cells after merging with the mortality table. ",
+                "Check that the ages in 'data' overlap with the table."))
 
-  # --- Prepare variables (one entry per cell) -----------------------------
-  deaths   <- as.integer(merged$deaths)
-  exposed  <- merged$exposed
-  qx       <- merged$qx
-  expected <- exposed * qx                       # mu_{x,t} = E_{x,t} * q_x
-  total_E  <- sum(expected)
-  log_off  <- log(pmax(expected, 1e-12))
-  ages     <- merged$age
-  z_age    <- as.numeric(scale(ages))            # standardised age covariate
+  d   <- merged$deaths
+  E   <- merged$exposed
+  x   <- merged$age
+  mu0 <- E * merged$qx
+  merged$expected <- mu0
+  D <- sum(d); Q <- sum(mu0)
 
-  n_cells  <- nrow(merged)
-  n_ages   <- length(unique(ages))
-  n_years  <- if (has_year_col) length(unique(merged$year))
-              else if (has_repeat_age) max(tabulate(ages))
-              else 1L
+  ages <- sort(unique(x))
+  s_x <- if (length(ages) > 1) stats::sd(ages) else 0
+  g <- if (s_x > 0) (x - mean(ages)) / s_x else rep(0, length(x))
+
+  d_age  <- as.numeric(tapply(d, x, sum)[as.character(ages)])
+  mu_age <- as.numeric(tapply(mu0, x, sum)[as.character(ages)])
 
   if (verbose) {
-    cat(sprintf(
-      "mortalityAdherence | Table: %s | %d cell(s) | %d unique age(s) | %d year(s)\n",
-      table_name, n_cells, n_ages, n_years
-    ))
-    cat(sprintf(
-      "  Exposed: %d | Observed: %d | Expected: %.1f | A/E: %.4f\n",
-      as.integer(sum(exposed)), sum(deaths), total_E,
-      sum(deaths) / pmax(total_E, 1e-12)
-    ))
-    cat("  Running non-parametric tests...\n")
+    cat(sprintf("mortalityAdherence | Table: %s | %d cell(s) | %d unique age(s) | %d year(s)\n",
+                table_name, nrow(merged), length(ages), as.integer(n_years)))
+    cat(sprintf("  Exposed: %s | Observed: %.0f | Expected: %.1f | A/E: %.4f\n",
+                formatC(sum(E), format = "f", digits = 0, big.mark = ","), D, Q, D / Q))
   }
+  if (D == 0)
+    say(paste0("  [Zero deaths] D = 0: Wald I and Wald II (Poisson and Negative ",
+               "Binomial) are not applicable and are reported as N/A ",
+               "(de Melo et al., 2026, Sec. 3.5). LRT tests remain valid."))
 
-  # --- Run all 11 tests ---------------------------------------------------
-  res_ks    <- .test_ks(deaths, expected, alpha)
-  res_chisq <- .test_chisq(deaths, expected, alpha)
+  # ---- the 11 tests ----------------------------------------------------------------
+  res <- list()
+  res$KS <- .test_ks(d_age, mu_age, alpha)
+  res$ChiSquare <- .test_chisq(d, mu0, alpha, chisq_df)
+  pois <- .poisson_family(d, mu0, g, alpha, d_age, mu_age)
+  one_age <- "Only one age in the data: age slope not identifiable."
+  if (s_x == 0) {
+    pois$WaldII_P <- .na_test(one_age, 2)
+    pois$LRTII_P  <- .na_test(one_age, 2)
+  }
+  res <- c(res, pois)
 
-  if (verbose) cat("  Running Poisson family tests...\n")
-  res_pois  <- .test_poisson_family(deaths, log_off, expected, z_age, alpha)
+  disp <- .dispersion_ratio(d, mu0)
+  skip <- NULL
+  if (D > 0 && skip_nb_if_no_overdispersion && !isTRUE(disp > 1)) {
+    say(sprintf(paste0("  [NB tests] No overdispersion detected (dispersion ratio = %.4f ",
+                       "<= 1). Negative Binomial tests are not applicable and were skipped; ",
+                       "the Poisson-based tests are appropriate for these data."), disp))
+    skip <- "Skipped: no overdispersion (dispersion ratio <= 1)"
+  }
+  nb <- .nb_family(d, mu0, g, alpha, skip)
+  if (s_x == 0 && is.null(skip)) {
+    nb$WaldII_NB <- .na_test(one_age, 2)
+    nb$LRTII_NB  <- .na_test(one_age, 2)
+  }
+  res <- c(res, nb)[.TEST_ORDER]
 
-  if (verbose) cat("  Running Negative Binomial family tests...\n")
-  res_nb    <- .test_nb_family(deaths, log_off, z_age, alpha)
-
-  # Dispersion ratio for reporting
-  fit_pois_disp <- tryCatch(
-    stats::glm(deaths ~ 1 + offset(log_off), family = stats::poisson),
-    error = function(e) NULL
-  )
-  dispersion_ratio <- if (!is.null(fit_pois_disp))
-    round(sum(stats::residuals(fit_pois_disp, type = "pearson")^2) /
-          stats::df.residual(fit_pois_disp), 4)
-  else NA_real_
-
-  # --- Assemble results ---------------------------------------------------
-  all_tests <- c(
-    list(KS = res_ks, ChiSquare = res_chisq),
-    res_pois,
-    res_nb
-  )
-
-  TEST_NAMES <- c(
-    "KS", "ChiSquare",
-    "WaldI_P", "WaldII_P", "LRTI_P", "LRTII_P", "BayesCI",
-    "WaldI_NB", "WaldII_NB", "LRTI_NB", "LRTII_NB"
-  )
-  DESCRIPTIONS <- c(
-    "Kolmogorov-Smirnov",
-    "Chi-Square Goodness-of-Fit",
-    "Wald Type I (Poisson)",
-    "Wald Type II — age slope (Poisson)",
-    "LRT Type I (Poisson)",
-    "LRT Type II — age slope (Poisson)",
-    "Bayesian Credibility Interval",
-    "Wald Type I (Negative Binomial)",
-    "Wald Type II — age slope (Neg. Binomial)",
-    "LRT Type I (Negative Binomial)",
-    "LRT Type II — age slope (Neg. Binomial)"
-  )
-  FAMILIES <- c(
-    "Non-parametric", "Non-parametric",
-    "Poisson", "Poisson", "Poisson", "Poisson", "Bayesian",
-    "Negative Binomial", "Negative Binomial",
-    "Negative Binomial", "Negative Binomial"
-  )
-  H0_LABELS <- c(
-    "CDF match",  "Obs = Exp",
-    "beta1 = 0", "(beta1,beta2) = 0",
-    "beta1 = 0", "(beta1,beta2) = 0",
-    "theta in CI",
-    "beta1 = 0", "(beta1,beta2) = 0",
-    "beta1 = 0", "(beta1,beta2) = 0"
-  )
-  DF_LABELS <- c(NA, "n-1", "1", "2", "1", "2", NA, "1", "2", "1", "2")
-
-  reject_vec <- sapply(TEST_NAMES, function(nm) {
-    r <- all_tests[[nm]]$reject
-    if (is.null(r) || length(r) == 0) return(NA)
-    as.logical(r)
-  })
-  stat_vec <- sapply(TEST_NAMES, function(nm) all_tests[[nm]]$statistic)
-  pval_vec <- sapply(TEST_NAMES, function(nm) {
-    pv <- all_tests[[nm]]$p_value
-    if (is.null(pv)) NA_real_ else pv
-  })
-
-  # Build notes column (KS critical value, BayesCI interval)
-  notes <- rep(NA_character_, length(TEST_NAMES))
-  notes[TEST_NAMES == "KS"] <- sprintf(
-    "Critical value = %.4f", res_ks$critical)
-  notes[TEST_NAMES == "BayesCI"] <- sprintf(
-    "95%% CI: [%.4f, %.4f]",
-    all_tests$BayesCI$ci_lower, all_tests$BayesCI$ci_upper)
-
+  # ---- summary ------------------------------------------------------------------------
+  num <- function(nm, f) { v <- res[[nm]][[f]]; if (is.null(v)) NA_real_ else as.numeric(v) }
+  rej <- vapply(.TEST_ORDER, function(nm) as.logical(res[[nm]]$reject), logical(1))
   summary_df <- data.frame(
-    test        = TEST_NAMES,
-    description = DESCRIPTIONS,
-    family      = FAMILIES,
-    h0          = H0_LABELS,
-    df          = DF_LABELS,
-    statistic   = round(stat_vec, 4),
-    p_value     = round(pval_vec, 6),
-    reject_h0   = ifelse(is.na(reject_vec), "Error",
-                         ifelse(reject_vec, "Yes", "No")),
-    note        = notes,
-    stringsAsFactors = FALSE
-  )
+    test        = .TEST_ORDER,
+    description = unname(.DESCRIPTIONS[.TEST_ORDER]),
+    family      = unname(.FAMILIES[.TEST_ORDER]),
+    h0          = unname(.H0[.TEST_ORDER]),
+    df          = vapply(.TEST_ORDER, num, numeric(1), f = "df"),
+    statistic   = vapply(.TEST_ORDER, num, numeric(1), f = "statistic"),
+    p_value     = vapply(.TEST_ORDER, num, numeric(1), f = "p_value"),
+    reject_h0   = ifelse(is.na(rej), "N/A", ifelse(rej, "Yes", "No")),
+    note        = vapply(.TEST_ORDER, function(nm) res[[nm]]$note, character(1)),
+    stringsAsFactors = FALSE, row.names = NULL)
 
-  result <- list(
-    summary          = summary_df,
-    details          = all_tests,
-    data_used        = merged,
-    table_name       = table_name,
-    alpha            = alpha,
-    n_cells          = n_cells,
-    n_ages           = n_ages,
-    n_years          = n_years,
-    total_exposed    = as.integer(sum(exposed)),
-    observed_deaths  = sum(deaths),
-    expected_deaths  = round(total_E, 2),
-    ae_ratio         = round(sum(deaths) / pmax(total_E, 1e-12), 4),
-    dispersion_ratio = dispersion_ratio
-  )
-  class(result) <- "adherence_result"
-  result
+  # minimum detectable deflator, 80% power (paper, eq. 17)
+  cc <- (stats::qnorm(1 - alpha / 2) + stats::qnorm(0.80)) / sqrt(Q)
+
+  structure(list(
+    summary = summary_df, details = res, data_used = merged,
+    table_name = table_name, alpha = alpha, n_cells = nrow(merged),
+    n_ages = length(ages), n_years = as.integer(n_years),
+    total_exposed = sum(E), observed_deaths = D, expected_deaths = Q,
+    ae_ratio = D / Q, dispersion_ratio = disp,
+    min_detectable = c(exp(-cc), exp(cc)), messages = msgs),
+    class = "adherence_result")
 }
 
 
 # =============================================================================
-# SECTION 3 — PRINT / DISPLAY
+# Reporting
 # =============================================================================
+
+.fmt_stat <- function(v) if (is.na(v)) "--" else sprintf("%.4f", v)
+.fmt_p <- function(v) if (is.na(v)) "--" else if (v < 1e-6) "<0.000001" else sprintf("%.6f", v)
+.fmt_int <- function(v) formatC(v, format = "f", digits = 0, big.mark = ",")
+
+.verdict <- function(x) {
+  s <- x$summary
+  n_rej <- sum(s$reject_h0 == "Yes")
+  n_tot <- sum(s$reject_h0 %in% c("Yes", "No"))
+  v <- if (n_rej == 0) "[OK] GOOD ADHERENCE: the table fits the fund data well."
+       else if (n_rej <= 3) "[!!] PARTIAL ADHERENCE: some tests failed. Review critical age groups."
+       else "[XX] POOR ADHERENCE: consider a different table or an adjustment factor."
+  sprintf("%d of %d applicable tests reject H0 at the %.0f%% significance level.\n  %s",
+          n_rej, n_tot, x$alpha * 100, v)
+}
+
+.format_result <- function(x, show_notes = TRUE) {
+  W <- 100
+  lo <- x$min_detectable[1]; hi <- x$min_detectable[2]
+  L <- c("", strrep("=", W),
+         "  mortalityAdherence :: Biometric Table Adherence Test",
+         strrep("=", W),
+         sprintf("  Mortality table    : %s", x$table_name),
+         sprintf("  Significance level : %.1f%%", x$alpha * 100),
+         sprintf("  Cells (rows)       : %d", x$n_cells),
+         sprintf("  Unique ages        : %d", x$n_ages),
+         sprintf("  Years              : %d", x$n_years),
+         sprintf("  Total exposed      : %s", .fmt_int(x$total_exposed)),
+         sprintf("  Observed deaths (D): %s", .fmt_int(x$observed_deaths)),
+         sprintf("  Expected deaths (Q): %s",
+                 formatC(x$expected_deaths, format = "f", digits = 2, big.mark = ",")),
+         sprintf("  A/E ratio (D/Q)    : %.4f  (%+.1f%%)", x$ae_ratio, (x$ae_ratio - 1) * 100))
+  if (!is.na(x$dispersion_ratio)) {
+    tag <- if (x$dispersion_ratio <= 1) "no overdispersion, NB tests not applicable"
+           else "overdispersion present, NB tests applied"
+    L <- c(L, sprintf("  Dispersion ratio   : %.4f -- %s", x$dispersion_ratio, tag))
+  }
+  L <- c(L, sprintf("  Min. detectable    : theta < %.2f or theta > %.2f (80%% power, version I tests)",
+                    lo, hi),
+         strrep("-", W),
+         sprintf("  %-11s  %-41s  %10s  %10s  Decision", "Test", "Description",
+                 "Statistic", "P-value"),
+         strrep("-", W))
+  prev <- ""
+  s <- x$summary
+  for (i in seq_len(nrow(s))) {
+    if (s$family[i] != prev) { L <- c(L, sprintf("  [ %s ]", s$family[i])); prev <- s$family[i] }
+    dec <- switch(s$reject_h0[i], Yes = "[ REJECT ]", No = "[  pass  ]", "[  N/A   ]")
+    L <- c(L, sprintf("  %-11s  %-41s  %10s  %10s  %s", s$test[i], s$description[i],
+                      .fmt_stat(s$statistic[i]), .fmt_p(s$p_value[i]), dec))
+    if (show_notes && nzchar(s$note[i])) L <- c(L, sprintf("  %-11s    -> %s", "", s$note[i]))
+  }
+  L <- c(L, strrep("=", W), paste0("  ", .verdict(x)))
+  if (x$observed_deaths == 0)
+    L <- c(L, "  Note: no deaths in the sample -- Wald tests are not applicable (paper, Sec. 3.5).")
+  if (any(s$reject_h0 == "No"))
+    L <- c(L, sprintf(paste0("  Note: a non-rejection only rules out deflators outside ",
+                             "[%.2f, %.2f] (80%% power); smaller departures may go ",
+                             "undetected (paper, eq. 17)."), lo, hi))
+  L <- c(L, "  Reference: de Melo, Graziadei & Targino (2026), SSRN 6668699.", "")
+  paste(L, collapse = "\n")
+}
+
 
 #' Print Adherence Test Results
 #'
-#' Displays a formatted summary of all 11 statistical tests to the console.
+#' Prints the formatted report of an \code{adherence_result}: header with
+#' \eqn{D}, \eqn{Q}, A/E ratio, dispersion ratio and minimum detectable
+#' deflator, the 11 tests grouped by family, and the verdict.
+#' \code{print(result)} does the same.
 #'
-#' @param x An object of class \code{adherence_result} returned by
-#'   \code{\link{testAdherence}()}.
-#' @param show_notes \code{logical} — whether to print additional notes
-#'   (KS critical value, Bayesian CI bounds). Default: \code{TRUE}.
-#' @param ... Currently unused.
-#'
-#' @return Invisibly returns \code{x}.
-#'
+#' @param x An \code{adherence_result} returned by \code{\link{testAdherence}()}.
+#' @param show_notes Print the note under each test (default \code{TRUE}).
+#' @param ... Not used.
+#' @return \code{x}, invisibly.
 #' @examples
-#' \dontrun{
-#' result <- testAdherence(fund_data, table = "AT-2000m")
-#' printResult(result)
-#' }
-#'
+#' zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+#' r <- testAdherence(zero, "AT-2000m", quiet = TRUE)
+#' printResult(r, show_notes = FALSE)
 #' @export
 printResult <- function(x, show_notes = TRUE, ...) {
   if (!inherits(x, "adherence_result"))
-    stop("'x' must be an 'adherence_result' object returned by testAdherence().")
-
-  w <- 72L  # console width
-
-  # --- Header block -------------------------------------------------------
-  cat("\n", strrep("=", w), "\n", sep = "")
-  cat("  mortalityAdherence :: Biometric Table Adherence Test\n")
-  cat(strrep("=", w), "\n", sep = "")
-  cat(sprintf("  Mortality table   : %s\n",   x$table_name))
-  cat(sprintf("  Significance level: %.1f%%\n", x$alpha * 100))
-  cat(sprintf("  Cells (rows)      : %d\n",   x$n_cells))
-  cat(sprintf("  Unique ages       : %d\n",   x$n_ages))
-  cat(sprintf("  Years             : %d\n",   x$n_years))
-  cat(sprintf("  Total exposed     : %s\n",
-              format(x$total_exposed,   big.mark = ",")))
-  cat(sprintf("  Observed deaths   : %s\n",
-              format(x$observed_deaths, big.mark = ",")))
-  cat(sprintf("  Expected deaths   : %.2f\n", x$expected_deaths))
-  cat(sprintf("  A/E ratio         : %.4f  (%+.1f%%)\n",
-              x$ae_ratio, (x$ae_ratio - 1) * 100))
-  if (!is.null(x$dispersion_ratio) && !is.na(x$dispersion_ratio)) {
-    nb_note <- if (x$dispersion_ratio <= 1)
-      sprintf("%.4f -- no overdispersion, NB tests not applicable", x$dispersion_ratio)
-    else
-      sprintf("%.4f -- overdispersion present, NB tests applied", x$dispersion_ratio)
-    cat(sprintf("  Dispersion ratio  : %s\n", nb_note))
-  }
-  cat(strrep("-", w), "\n", sep = "")
-
-  # --- Results table ------------------------------------------------------
-  df <- x$summary
-
-  # Format columns for display
-  stat_fmt <- ifelse(is.na(df$statistic), "      --",
-                     sprintf("%8.4f", df$statistic))
-  pval_fmt <- ifelse(is.na(df$p_value),  "   --    ",
-                     sprintf("%.6f", df$p_value))
-  dec_fmt  <- ifelse(df$reject_h0 == "Yes",   "[ REJECT ]",
-              ifelse(df$reject_h0 == "No",    "[  pass  ]",
-                                              "[   N/A  ]"))
-
-  # Group separator tracking
-  prev_family <- ""
-  cat(sprintf("\n  %-11s  %-40s  %8s  %9s  %s\n",
-              "Test", "Description", "Statistic", "P-value", "Decision"))
-  cat(strrep("-", w), "\n", sep = "")
-
-  for (i in seq_len(nrow(df))) {
-    fam <- df$family[i]
-    if (fam != prev_family) {
-      cat(sprintf("  [ %s ]\n", fam))
-      prev_family <- fam
-    }
-    note_str <- if (show_notes && !is.na(df$note[i]))
-      sprintf("    -> %s", df$note[i]) else ""
-    cat(sprintf("  %-11s  %-40s  %s  %s  %s%s\n",
-                df$test[i], df$description[i],
-                stat_fmt[i], pval_fmt[i], dec_fmt[i], note_str))
-  }
-
-  cat(strrep("=", w), "\n", sep = "")
-
-  # --- Verdict block ------------------------------------------------------
-  n_rej <- sum(df$reject_h0 == "Yes", na.rm = TRUE)
-  n_tot <- sum(df$reject_h0 %in% c("Yes", "No"), na.rm = TRUE)
-  cat(sprintf(
-    "\n  %d of %d tests reject H0 at the %.0f%% significance level.\n",
-    n_rej, n_tot, x$alpha * 100
-  ))
-  verdict <- ifelse(n_rej == 0L,
-    "  [OK] GOOD ADHERENCE: the table fits the fund data well.",
-    ifelse(n_rej <= 3L,
-    "  [!!] PARTIAL ADHERENCE: some tests failed. Review critical age groups.",
-    "  [XX] POOR ADHERENCE: consider a different table or an adjustment factor."
-  ))
-  cat(verdict, "\n\n", sep = "")
-
+    stop("'x' must be an 'adherence_result' returned by testAdherence().")
+  cat(.format_result(x, show_notes = show_notes), "\n", sep = "")
   invisible(x)
 }
 
-
+#' @rdname printResult
 #' @export
-print.adherence_result <- function(x, ...) {
-  printResult(x, ...)
+print.adherence_result <- function(x, ...) printResult(x, ...)
+
+
+.esc <- function(s) {
+  s <- gsub("&", "&amp;", s, fixed = TRUE)
+  s <- gsub("<", "&lt;", s, fixed = TRUE)
+  s <- gsub(">", "&gt;", s, fixed = TRUE)
+  s <- gsub("\"", "&quot;", s, fixed = TRUE)
+  gsub("'", "&#x27;", s, fixed = TRUE)
+}
+
+.CSS <- paste0("\n<style>\n",
+  ".ma-wrap{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:1100px;color:#1d2433}\n",
+  ".ma-wrap h2{font-size:1.15rem;margin:0 0 .4rem}\n",
+  ".ma-meta{display:flex;flex-wrap:wrap;gap:.4rem 1.4rem;font-size:.85rem;color:#4a5468;margin:.2rem 0 .8rem}\n",
+  ".ma-meta b{color:#1d2433}\n",
+  ".ma-tab{border-collapse:collapse;width:100%;font-size:.85rem}\n",
+  ".ma-tab th{background:#1f3a5f;color:#fff;text-align:left;padding:.45rem .6rem;font-weight:600}\n",
+  ".ma-tab td{padding:.4rem .6rem;border-bottom:1px solid #e3e7ee;vertical-align:top}\n",
+  ".ma-tab td.num{text-align:right;font-variant-numeric:tabular-nums}\n",
+  ".ma-fam td{background:#f2f5f9;font-weight:600;color:#1f3a5f}\n",
+  ".ma-rej td{background:#fdecec}.ma-rej td.dec{color:#b3261e;font-weight:700}\n",
+  ".ma-ok td.dec{color:#1b7f3b;font-weight:700}\n",
+  ".ma-na td{color:#8a93a4}\n",
+  ".ma-note{font-size:.78rem;color:#6b7486}\n",
+  ".ma-verdict{margin-top:.8rem;padding:.6rem .8rem;border-radius:6px;background:#eef3fa;font-size:.9rem}\n",
+  ".ma-ref{font-size:.75rem;color:#6b7486;margin-top:.6rem}\n",
+  "</style>\n")
+
+.html_table <- function(x, full_page = TRUE) {
+  lo <- x$min_detectable[1]; hi <- x$min_detectable[2]
+  meta <- list(c("Table", x$table_name), c("alpha", sprintf("%.2f", x$alpha)),
+               c("Cells", x$n_cells), c("Ages", x$n_ages), c("Years", x$n_years),
+               c("Exposed", .fmt_int(x$total_exposed)),
+               c("Observed D", .fmt_int(x$observed_deaths)),
+               c("Expected Q", formatC(x$expected_deaths, format = "f", digits = 1, big.mark = ",")),
+               c("A/E", sprintf("%.4f", x$ae_ratio)),
+               c("Dispersion", if (is.na(x$dispersion_ratio)) "--" else sprintf("%.3f", x$dispersion_ratio)),
+               c("Min. detectable", sprintf("&theta;&lt;%.2f or &gt;%.2f", lo, hi)))
+  parts <- c(.CSS, '<div class="ma-wrap"><h2>Mortality table adherence tests</h2>',
+             paste0('<div class="ma-meta">',
+                    paste0(vapply(meta, function(m) sprintf("<span>%s: <b>%s</b></span>", m[1], m[2]),
+                                  character(1)), collapse = ""), "</div>"),
+             paste0('<table class="ma-tab"><thead><tr><th>Test</th><th>Description</th><th>H0</th>',
+                    '<th>df</th><th>Statistic</th><th>P-value</th><th>Decision</th></tr></thead><tbody>'))
+  prev <- ""
+  s <- x$summary
+  for (i in seq_len(nrow(s))) {
+    if (s$family[i] != prev) {
+      parts <- c(parts, sprintf('<tr class="ma-fam"><td colspan="7">%s</td></tr>', .esc(s$family[i])))
+      prev <- s$family[i]
+    }
+    cls <- switch(s$reject_h0[i], Yes = "ma-rej", No = "ma-ok", "ma-na")
+    dec <- switch(s$reject_h0[i], Yes = "REJECT", No = "Pass", "N/A")
+    note <- if (nzchar(s$note[i])) sprintf('<div class="ma-note">%s</div>', .esc(s$note[i])) else ""
+    dfv <- if (is.na(s$df[i])) "" else sprintf("%d", as.integer(s$df[i]))
+    parts <- c(parts, paste0(
+      sprintf('<tr class="%s"><td><b>%s</b></td><td>%s%s</td>', cls, .esc(s$test[i]),
+              .esc(s$description[i]), note),
+      sprintf('<td>%s</td><td class="num">%s</td>', .esc(s$h0[i]), dfv),
+      sprintf('<td class="num">%s</td>', .fmt_stat(s$statistic[i])),
+      sprintf('<td class="num">%s</td><td class="dec">%s</td></tr>', .esc(.fmt_p(s$p_value[i])), dec)))
+  }
+  parts <- c(parts, "</tbody></table>",
+             sprintf('<div class="ma-verdict">%s</div>', gsub("\n", "<br>", .esc(.verdict(x)), fixed = TRUE)),
+             paste0('<div class="ma-ref">de Melo, E.F.L., Graziadei, H. &amp; Targino, R. (2026). ',
+                    'Annuity Table Validation in Pension Funds: A Comparative Power Analysis of ',
+                    'Goodness-of-Fit Tests. SSRN 6668699.</div></div>'))
+  body <- paste(parts, collapse = "\n")
+  if (!full_page) return(body)
+  paste0('<!doctype html><html><head><meta charset="utf-8">',
+         '<meta name="viewport" content="width=device-width,initial-scale=1">',
+         sprintf("<title>Adherence tests - %s</title></head>", .esc(x$table_name)),
+         sprintf('<body style="margin:24px">%s</body></html>', body))
 }
 
 
-#' Render an HTML Table of Adherence Test Results
+#' Styled HTML Table of the Results
 #'
-#' Produces a styled HTML table suitable for R Markdown reports and Shiny apps.
-#' Rows that reject H\eqn{_0} are highlighted in red; rows that pass are
-#' highlighted in green.
+#' Builds a styled HTML table of the 11 tests (rejections in red, passes in
+#' green), with the header metrics and the verdict. No extra packages needed.
 #'
-#' @param x An object of class \code{adherence_result} returned by
-#'   \code{\link{testAdherence}()}.
-#' @param ... Additional arguments passed to \code{kableExtra::kable_styling()}.
-#'
-#' @return A \code{knitr_kable} object (HTML table ready for rendering).
-#'
-#' @details
-#' Requires the packages \pkg{knitr} and \pkg{kableExtra}. Install them with:
-#' \code{install.packages(c("knitr", "kableExtra"))}.
-#'
+#' @param x An \code{adherence_result} returned by \code{\link{testAdherence}()}.
+#' @param path Optional file path; if given, the full HTML page is written there.
+#' @param full_page If \code{TRUE} (default) a complete HTML page is returned;
+#'   if \code{FALSE}, only the table fragment.
+#' @return The HTML as a character string (invisibly when \code{path} is given).
+#'   Inside an R Markdown / Quarto document the table is rendered directly.
 #' @examples
-#' \dontrun{
-#' result <- testAdherence(fund_data, table = "AT-2000m")
-#' htmlTable(result)   # inside an R Markdown chunk
-#' }
-#'
+#' zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+#' r <- testAdherence(zero, "AT-2000m", quiet = TRUE)
+#' f <- tempfile(fileext = ".html")
+#' htmlTable(r, path = f)
 #' @export
-htmlTable <- function(x, ...) {
+htmlTable <- function(x, path = NULL, full_page = TRUE) {
   if (!inherits(x, "adherence_result"))
-    stop("'x' must be an 'adherence_result' object returned by testAdherence().")
-  if (!requireNamespace("knitr",      quietly = TRUE) ||
-      !requireNamespace("kableExtra", quietly = TRUE))
-    stop("Please install: install.packages(c('knitr', 'kableExtra'))")
+    stop("'x' must be an 'adherence_result' returned by testAdherence().")
+  if (isTRUE(getOption("knitr.in.progress")) && is.null(path) &&
+      requireNamespace("htmltools", quietly = TRUE))
+    return(htmltools::HTML(.html_table(x, full_page = FALSE)))
+  out <- .html_table(x, full_page = full_page)
+  if (!is.null(path)) {
+    writeLines(out, path, useBytes = TRUE)
+    return(invisible(out))
+  }
+  out
+}
 
-  df <- x$summary
-  out <- data.frame(
-    Test        = df$test,
-    Description = df$description,
-    Family      = df$family,
-    H0          = df$h0,
-    df          = df$df,
-    Statistic   = ifelse(is.na(df$statistic), "--",
-                         sprintf("%.4f", df$statistic)),
-    P.value     = ifelse(is.na(df$p_value),  "--",
-                         sprintf("%.6f", df$p_value)),
-    Decision    = ifelse(df$reject_h0 == "Yes", "[REJECT]",
-                  ifelse(df$reject_h0 == "No",  "[ pass ]", "[ Error]")),
-    Note        = ifelse(is.na(df$note), "", df$note),
-    check.names = FALSE,
-    stringsAsFactors = FALSE
-  )
 
-  caption <- sprintf(
-    paste0("Adherence Tests -- Table: <strong>%s</strong> ",
-           "| alpha = %.2f | Ages: %d",
-           " | Exposed: %s | Observed: %d | Expected: %.1f | A/E: %.4f"),
-    x$table_name, x$alpha, x$n_ages,
-    format(x$total_exposed, big.mark = ","),
-    x$observed_deaths, x$expected_deaths, x$ae_ratio
-  )
-
-  reject_rows <- which(df$reject_h0 == "Yes")
-  pass_rows   <- which(df$reject_h0 == "No")
-
-  tab <- knitr::kable(
-    out, format = "html",
-    align   = c("l", "l", "l", "l", "c", "r", "r", "c", "l"),
-    caption = caption,
-    escape  = FALSE
-  )
-  tab <- kableExtra::kable_styling(
-    tab,
-    bootstrap_options = c("striped", "hover", "condensed", "bordered"),
-    full_width = TRUE, ...
-  )
-  if (length(reject_rows) > 0)
-    tab <- kableExtra::row_spec(tab, reject_rows,
-                                background = "#fde8e8", bold = TRUE,
-                                color = "#b71c1c")
-  if (length(pass_rows)   > 0)
-    tab <- kableExtra::row_spec(tab, pass_rows,
-                                background = "#e8f5e9", color = "#1b5e20")
-  tab <- kableExtra::column_spec(tab, 8, bold = TRUE)
-  tab
+#' Export the Results to Excel
+#'
+#' Writes an \code{.xlsx} file with three sheets: \code{Tests} (the 11 tests),
+#' \code{Overview} (totals, A/E, dispersion, minimum detectable deflator and
+#' verdict) and \code{Data used} (the cells analysed). Requires the
+#' \pkg{writexl} package (\code{install.packages("writexl")}).
+#'
+#' @param x An \code{adherence_result} returned by \code{\link{testAdherence}()}.
+#' @param path Path of the \code{.xlsx} file to create.
+#' @return \code{path}, invisibly.
+#' @examples
+#' \donttest{
+#' if (requireNamespace("writexl", quietly = TRUE)) {
+#'   zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+#'   r <- testAdherence(zero, "AT-2000m", quiet = TRUE)
+#'   exportExcel(r, tempfile(fileext = ".xlsx"))
+#' }
+#' }
+#' @export
+exportExcel <- function(x, path) {
+  if (!inherits(x, "adherence_result"))
+    stop("'x' must be an 'adherence_result' returned by testAdherence().")
+  if (!requireNamespace("writexl", quietly = TRUE))
+    stop("Package 'writexl' is required: install.packages('writexl')")
+  overview <- data.frame(
+    item = c("Mortality table", "alpha", "Cells", "Unique ages", "Years",
+             "Total exposed", "Observed deaths (D)", "Expected deaths (Q)",
+             "A/E ratio (D/Q)", "Dispersion ratio",
+             "Min. detectable theta (low)", "Min. detectable theta (high)", "Verdict"),
+    value = c(x$table_name, x$alpha, x$n_cells, x$n_ages, x$n_years,
+              x$total_exposed, x$observed_deaths, x$expected_deaths,
+              x$ae_ratio, x$dispersion_ratio, x$min_detectable[1], x$min_detectable[2],
+              gsub("\n  ", " ", .verdict(x), fixed = TRUE)),
+    stringsAsFactors = FALSE)
+  writexl::write_xlsx(list(Tests = x$summary, Overview = overview,
+                           `Data used` = x$data_used), path)
+  invisible(path)
 }

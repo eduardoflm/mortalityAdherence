@@ -297,6 +297,7 @@ def testAdherence(data: pd.DataFrame,
             "note": r.get("note", ""),
         })
     summary = pd.DataFrame(rows)
+    summary["df"] = pd.array([None if pd.isna(v) else int(v) for v in summary["df"]], dtype="Int64")
 
     # minimum detectable deflator, 80% power (paper, eq. 17)
     c = (stats.norm.ppf(1 - alpha / 2) + stats.norm.ppf(0.80)) / math.sqrt(Q)

@@ -281,3 +281,11 @@ def test_size_close_to_nominal_quick():
         p = _tests.poisson_family(d, mu0, g, 0.05, d, mu0)
         rej += [p["WaldI_P"]["reject"], p["LRTI_P"]["reject"]]
     assert np.all((rej / reps > 0.02) & (rej / reps < 0.09))
+
+
+def test_export_excel_function(tmp_path):
+    res = run("single_year.csv")
+    out = ma.exportExcel(res, str(tmp_path / "x.xlsx"))
+    assert (tmp_path / "x.xlsx").exists() and out.endswith("x.xlsx")
+    assert ma.__version__ == "0.2.0"
+    assert res.summary["df"].dtype.name == "Int64"

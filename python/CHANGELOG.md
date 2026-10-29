@@ -1,5 +1,15 @@
 # Changelog — mortalityAdherence (Python)
 
+## 0.2.0 — 2026-10-29
+
+Version numbers of the R and Python packages are now kept in sync.
+
+- `exportExcel(result, path)` function (same name as in the R package).
+- Negative Binomial: when phi-hat tends to infinity (no overdispersion) the Poisson
+  limit is reported deterministically ("phi at boundary").
+- `df` column of the summary is an integer column.
+- AT-2000bm described as the AT-2000 basic table.
+
 ## 0.1.0 — 2026-10-29
 
 First Python release, mirroring the R package `mortalityAdherence`.

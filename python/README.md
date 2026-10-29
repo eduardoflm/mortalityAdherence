@@ -44,7 +44,7 @@ result = ma.testAdherence(data, table="AT-2000m", alpha=0.05)
 # 4. Results
 print(result)                     # formatted report
 result.summary                    # DataFrame with the 11 tests
-result.to_excel("results.xlsx")   # Excel: tests, overview, data used
+ma.exportExcel(result, "results.xlsx")   # Excel: tests, overview, data used
 result.to_html("results.html")    # styled HTML table
 ```
 
@@ -123,10 +123,11 @@ result = ma.testAdherence(data, table=external)
 | `loadFundData(file, ...)` | Reads CSV / Excel fund data |
 | `printResult(result)` | Formatted console report |
 | `htmlTable(result, path=None)` | Styled HTML table |
+| `exportExcel(result, path)` | Excel file: tests, overview, data used |
 | `mortality_tables` | All 10 tables (ages 0–120) |
 
 snake_case aliases are also available: `test_adherence`, `list_tables`, `load_table`,
-`load_fund_data`, `print_result`, `html_table`.
+`load_fund_data`, `print_result`, `html_table`, `export_excel`.
 
 Built-in tables: AT-2000bm, AT-2000m, AT-49M, AT-55m, AT-83ms, GAM71m, GAM83m,
 BR-EMS2010, BR-EMS2015, BR-EMS2021.

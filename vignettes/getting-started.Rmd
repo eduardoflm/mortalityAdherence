@@ -36,17 +36,18 @@ It implements **11 statistical tests** across four methodological families:
 ## Installation
 
 ```{r install, eval=FALSE}
-# Core dependencies
-install.packages(c("MASS", "car", "sfsmisc"))
+install.packages("remotes")
+remotes::install_url(
+  "https://github.com/eduardoflm/mortalityAdherence/archive/refs/heads/main.zip"
+)
 
-# Optional (for HTML output and Excel reading)
-install.packages(c("knitr", "kableExtra", "readxl"))
-
-# Install the package
-devtools::install_github("yourusername/mortalityAdherence")
-# or from source:
-devtools::install_local("mortalityAdherence")
+# Optional: reading Excel files and exporting results to Excel
+install.packages(c("readxl", "writexl"))
 ```
+
+The package has no mandatory dependencies besides base R. A Python version
+with the same functions and identical results is in the `python/` folder of
+the repository.
 
 ---
 
@@ -196,11 +197,28 @@ print(result_custom)
 
 ---
 
-## Step 7 — HTML output for reports and Shiny
+## Step 7 — HTML and Excel output
 
 ```{r html-table, eval=FALSE}
-# Inside an R Markdown chunk or Shiny app:
-htmlTable(result)
+htmlTable(result, path = "results.html")   # styled HTML page
+exportExcel(result, "results.xlsx")         # sheets: Tests, Overview, Data used
+```
+
+Inside an R Markdown or Quarto document, `htmlTable(result)` renders the table
+directly.
+
+---
+
+## Step 8 — Samples without deaths
+
+When there are no deaths in the sample (D = 0), the Wald tests (versions I and
+II, Poisson and Negative Binomial) are not applicable and are reported as
+`N/A` (de Melo et al., 2026, Sec. 3.5). The likelihood ratio tests remain
+valid; their statistic is 2Q.
+
+```{r zero-deaths}
+zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+testAdherence(zero, table = "AT-2000m", quiet = TRUE)
 ```
 
 ---
@@ -210,9 +228,9 @@ htmlTable(result)
 ### Type I vs Type II tests
 
 - **Type I** tests (e.g. `WaldI_P`, `LRTI_NB`) test whether the table's
-  *overall level* is correct. H₀: a single global multiplier \eqn{\beta_1 = 0}.
+  *overall level* is correct. H₀: a constant log-deflator, $\beta = 0$.
 - **Type II** tests (e.g. `WaldII_P`, `LRTII_NB`) additionally detect
-  *age-systematic* bias. H₀: \eqn{(\beta_1, \beta_2) = (0, 0)}. Rejecting
+  *age-systematic* bias. H₀: $\beta_1 = \beta_2 = 0$ (joint $\chi^2_2$ test). Rejecting
   Type II but not Type I suggests the table is globally calibrated but
   systematically under/over-estimates mortality at specific ages.
 
@@ -223,18 +241,34 @@ htmlTable(result)
 - **Negative Binomial** tests are robust when extra-Poisson variation is
   present (e.g. mortality clustering in small funds or during epidemics).
 
-### Bayesian Credibility Interval
+### Bayesian credible interval
 
-The `BayesCI` test uses a moment-matched Gamma prior (computed from the
-per-age observed/expected ratios) conjugate to the Poisson likelihood.
-It rejects when the posterior credibility interval for the global adjustment
-factor \eqn{\theta} excludes 1. This test is particularly informative for
-small funds where frequentist p-values can be unreliable.
+The `BayesCI` test uses an empirical-Bayes Gamma prior, obtained by the method
+of moments from the age-specific observed/expected ratios, conjugate to the
+Poisson likelihood. It rejects when the posterior credible interval for the
+global deflator $\theta$ excludes 1. The value in the `p_value` column is the
+posterior tail probability $\pi = 2\min\{P(\theta \le 1), P(\theta \ge 1)\}$,
+which is not a frequentist p-value.
+
+### Reading a non-rejection
+
+Every result reports the minimum detectable deflator (paper, eq. 17): the
+smallest departures from the table that the version I tests detect with 80%
+power. In a small fund a non-rejection may only mean that the fund is too
+small to tell, not that the table fits.
+
+### KS test
+
+The KS statistic is invariant to the overall level of mortality (paper,
+Sec. 3.6): it cannot detect a table that is uniformly too high or too low.
 
 ---
 
 ## References
 
+- de Melo, E.F.L., Graziadei, H. & Targino, R. (2026). *Annuity Table Validation
+  in Pension Funds: A Comparative Power Analysis of Goodness-of-Fit Tests.*
+  SSRN Working Paper. <https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6668699>
 - Bowers, N.L. et al. (1997). *Actuarial Mathematics*, 2nd ed. Society of Actuaries.
 - London, D. (1985). *Survival Models and Their Estimation*. ACTEX Publications.
 - Benjamin, B. & Pollard, J.H. (1993). *The Analysis of Mortality and Other

@@ -26,6 +26,7 @@ from scipy import optimize, special
 # the Poisson limit; reaching the upper bound is reported as "phi at boundary".
 _LOG_PHI_MIN = np.log(1e-6)
 _LOG_PHI_MAX = np.log(1e10)
+_LOG_PHI_FLAT = np.log(1e8)   # above this, phi-hat is taken as the Poisson limit
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,11 @@ def poisson_loglik(d: np.ndarray, mu: np.ndarray) -> float:
 def fit_poisson(d: np.ndarray, offset: np.ndarray, X: np.ndarray,
                 maxit: int = 100, tol: float = 1e-10) -> PoissonFit:
     """Newton-Raphson (= IRLS for the canonical log link) with step halving."""
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        return _fit_poisson(d, offset, X, maxit, tol)
+
+
+def _fit_poisson(d, offset, X, maxit, tol):
     p = X.shape[1]
     beta = np.zeros(p)
     # good start for the intercept: log(D/Q)
@@ -146,6 +152,11 @@ def _nb_beta_given_phi(d, offset, X, phi, beta0, maxit=100, tol=1e-11):
 
 
 def fit_nb(d: np.ndarray, offset: np.ndarray, X: Optional[np.ndarray]) -> NBFit:
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        return _fit_nb(d, offset, X)
+
+
+def _fit_nb(d, offset, X):
     """
     Joint MLE of (beta, phi) by profiling phi out:
     for each phi, beta(phi) maximises the (concave) log-likelihood; the
@@ -185,6 +196,10 @@ def fit_nb(d: np.ndarray, offset: np.ndarray, X: Optional[np.ndarray]) -> NBFit:
     res = optimize.minimize_scalar(neg_profile, bounds=(lo, hi), method="bounded",
                                    options={"xatol": 1e-9, "maxiter": 500})
     best = res.x if res.fun <= vals[i] else grid[i]
+    # The profile is flat as phi -> infinity (no overdispersion): report the
+    # Poisson limit deterministically, at the upper bound phi = 1e10.
+    if best > _LOG_PHI_FLAT:
+        best = _LOG_PHI_MAX
     beta, val = cache.get(best, (None, None))
     if beta is None:
         neg_profile(best)
@@ -196,6 +211,6 @@ def fit_nb(d: np.ndarray, offset: np.ndarray, X: Optional[np.ndarray]) -> NBFit:
     if p > 0:
         w = mu / (1.0 + mu / phi)
         info = X.T @ (w[:, None] * X)      # expected information (paper, Sec. 3.1)
-    at_boundary = best > _LOG_PHI_MAX - 0.5
+    at_boundary = best >= _LOG_PHI_MAX
     return NBFit(beta=beta, phi=phi, mu=mu, loglik=val, info=info,
                  phi_at_boundary=bool(at_boundary))

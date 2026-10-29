@@ -134,7 +134,7 @@ def html_table(result, full_page: bool = True) -> str:
         cls = {"Yes": "ma-rej", "No": "ma-ok"}.get(r["reject_h0"], "ma-na")
         dec = {"Yes": "REJECT", "No": "Pass"}.get(r["reject_h0"], "N/A")
         note = f'<div class="ma-note">{e(r["note"])}</div>' if r["note"] else ""
-        dfv = "" if r["df"] is None or (isinstance(r["df"], float) and math.isnan(r["df"])) else r["df"]
+        dfv = "" if pd.isna(r["df"]) else str(int(r["df"]))
         parts.append(
             f'<tr class="{cls}"><td><b>{e(r["test"])}</b></td><td>{e(r["description"])}{note}</td>'
             f'<td>{e(r["h0"])}</td><td class="num">{dfv}</td>'
@@ -157,6 +157,12 @@ def html_table(result, full_page: bool = True) -> str:
 def htmlTable(result, path: str = None) -> str:
     """Return (and optionally save) a styled HTML table of the results."""
     return result.to_html(path)
+
+
+def exportExcel(result, path: str) -> str:
+    """Write the results to an .xlsx file (sheets: Tests, Overview, Data used)."""
+    write_excel(result, path)
+    return path
 
 
 def write_excel(result, path: str) -> None:

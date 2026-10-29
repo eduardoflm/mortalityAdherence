@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mortalityAdherence"
-version = "0.1.0"
+version = "0.2.0"
 description = "Statistical validation of mortality/annuity tables for pension funds: 11 goodness-of-fit tests (Python version of the R package)."
 readme = "README.md"
 requires-python = ">=3.9"

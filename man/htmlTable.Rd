@@ -2,42 +2,29 @@
 % Please edit documentation in R/adherence.R
 \name{htmlTable}
 \alias{htmlTable}
-\title{Render an HTML Table of Adherence Test Results}
+\title{Styled HTML Table of the Results}
 \usage{
-htmlTable(x, ...)
+htmlTable(x, path = NULL, full_page = TRUE)
 }
 \arguments{
-\item{x}{An object of class \code{adherence_result} returned by
-\code{\link{testAdherence}()}.}
+\item{x}{An \code{adherence_result} returned by \code{\link{testAdherence}()}.}
 
-\item{...}{Additional arguments passed to
-\code{kableExtra::kable_styling()}.}
+\item{path}{Optional file path; if given, the full HTML page is written there.}
+
+\item{full_page}{If \code{TRUE} (default) a complete HTML page is returned;
+if \code{FALSE}, only the table fragment.}
 }
 \value{
-A \code{knitr_kable} object -- a styled HTML table ready for
-rendering in R Markdown documents or Shiny applications.
+The HTML as a character string (invisibly when \code{path} is given).
+  Inside an R Markdown / Quarto document the table is rendered directly.
 }
 \description{
-Produces a styled HTML table of all 11 adherence test results, suitable
-for actuarial reports in R Markdown or interactive Shiny dashboards.
-Rows that reject H0 are highlighted in red; rows that pass are
-highlighted in green.
-}
-\details{
-Requires the packages \pkg{knitr} and \pkg{kableExtra}:
-\preformatted{install.packages(c("knitr", "kableExtra"))}
+Builds a styled HTML table of the 11 tests (rejections in red, passes in
+green), with the header metrics and the verdict. No extra packages needed.
 }
 \examples{
-\dontrun{
-result <- testAdherence(fund_data, table = "AT-2000m")
-
-# Inside an R Markdown chunk:
-htmlTable(result)
-
-# With custom kableExtra styling:
-htmlTable(result, font_size = 12, position = "left")
-}
-}
-\seealso{
-\code{\link{testAdherence}}, \code{\link{printResult}}
+zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+r <- testAdherence(zero, "AT-2000m", quiet = TRUE)
+f <- tempfile(fileext = ".html")
+htmlTable(r, path = f)
 }

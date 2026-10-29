@@ -4,128 +4,120 @@
 \alias{testAdherence}
 \title{Test the Adherence of a Mortality Table to Pension Fund Data}
 \usage{
-testAdherence(data, table, alpha = 0.05, verbose = FALSE)
+testAdherence(
+  data,
+  table,
+  alpha = 0.05,
+  verbose = FALSE,
+  quiet = FALSE,
+  skip_nb_if_no_overdispersion = TRUE,
+  chisq_df = "k-1"
+)
 }
 \arguments{
-\item{data}{\code{data.frame} with the pension fund experience data.
-Required columns:
-\itemize{
-  \item \code{age}     -- participant age (integer)
-  \item \code{exposed} -- number of lives exposed to the risk of death
-  \item \code{deaths}  -- number of observed deaths
-}
-Optional column:
-\itemize{
-  \item \code{year} -- calendar year, for multi-year data in long format
-}}
+\item{data}{\code{data.frame} with columns \code{age}, \code{exposed},
+\code{deaths} and, optionally, \code{year}, in \strong{long format}: one
+row per (year, age) cell, with the years stacked one below the other.
+Without a \code{year} column, repeated ages are treated as stacked years
+(additional cells). Years are never aggregated.}
 
-\item{table}{Either a \code{character} string naming a built-in table
-(see \code{\link{listTables}()}), or a \code{data.frame} with columns
-\code{age} and \code{qx} (annual probability of death) for a custom or
-external table.}
+\item{table}{Name of a built-in table (see \code{\link{listTables}()}) or a
+\code{data.frame} with columns \code{age} and \code{qx} (an external,
+loaded or deloaded table).}
 
-\item{alpha}{\code{numeric} -- significance level for all tests.
-Default: \code{0.05}.}
+\item{alpha}{Significance level (default 0.05).}
 
-\item{verbose}{\code{logical} -- if \code{TRUE}, prints progress messages.
-Default: \code{FALSE}.}
+\item{verbose}{If \code{TRUE}, prints progress information.}
+
+\item{quiet}{If \code{TRUE}, suppresses the informative messages (they are
+kept in \code{result$messages}).}
+
+\item{skip_nb_if_no_overdispersion}{If \code{TRUE} (default) the Negative
+Binomial tests are skipped when the dispersion ratio is <= 1.}
+
+\item{chisq_df}{Degrees of freedom of the chi-squared test: \code{"k-1"}
+(default; convention of practice, used in the paper) or \code{"k"}
+(correct reference distribution for a fixed table; paper Sec. 2.1).}
 }
 \value{
-An object of class \code{adherence_result} (a named list) containing:
+An object of class \code{adherence_result}, a list with:
 \describe{
-  \item{\code{$summary}}{A \code{data.frame} with one row per test: name,
-    family, statistic, p-value, and rejection decision.}
-  \item{\code{$details}}{Named list with full output of each individual test.}
-  \item{\code{$data_used}}{The merged data frame used in the analysis.}
-  \item{\code{$table_name}}{Name of the mortality table tested.}
-  \item{\code{$alpha}}{Significance level used.}
-  \item{\code{$n_cells}}{Total number of cells (rows) analysed.}
-  \item{\code{$n_ages}}{Number of unique age groups.}
-  \item{\code{$n_years}}{Number of years detected in the data.}
-  \item{\code{$total_exposed}}{Total number of exposed lives.}
-  \item{\code{$observed_deaths}}{Total observed deaths.}
-  \item{\code{$expected_deaths}}{Total expected deaths under the tested table.}
-  \item{\code{$ae_ratio}}{Actual-to-Expected (A/E) deaths ratio.}
-  \item{\code{$dispersion_ratio}}{Pearson dispersion ratio (used to assess
-    whether Negative Binomial tests are applicable).}
+  \item{\code{summary}}{\code{data.frame}, one row per test: \code{test},
+    \code{description}, \code{family}, \code{h0}, \code{df},
+    \code{statistic}, \code{p_value}, \code{reject_h0} ("Yes", "No" or
+    "N/A") and \code{note}.}
+  \item{\code{details}}{Full output of each test (e.g. Bayesian CI bounds,
+    estimated \eqn{\phi} of the NB models).}
+  \item{\code{data_used}}{The cells analysed, with \code{qx} and
+    \code{expected} = exposed x qx.}
+  \item{\code{table_name}, \code{alpha}, \code{n_cells}, \code{n_ages},
+    \code{n_years}}{Description of the analysis.}
+  \item{\code{total_exposed}, \code{observed_deaths}, \code{expected_deaths}}{
+    Totals (\eqn{D} and \eqn{Q}).}
+  \item{\code{ae_ratio}}{\eqn{D/Q}, the version I deflator estimate.}
+  \item{\code{dispersion_ratio}}{Pearson \eqn{\chi^2}/df of the
+    intercept-only Poisson model.}
+  \item{\code{min_detectable}}{Smallest deflators detectable with 80\% power
+    by the version I tests (paper, eq. 17).}
+  \item{\code{messages}}{Informative messages produced by the analysis.}
 }
 }
 \description{
-Applies all 11 statistical adherence tests to observed pension fund
-mortality data, comparing against a reference biometric mortality table.
+Runs the 11 goodness-of-fit tests of de Melo, Graziadei & Targino (2026)
+comparing the observed mortality of a pension fund with a reference
+(fixed) mortality / annuity table.
 }
 \details{
-\strong{Multi-year data (long format):}
+\strong{The 11 tests.}
+\code{KS} is computed on the age margins (paper, eq. 2) with the 5\%
+critical value of \code{sfsmisc::KSd}; note that the KS statistic is
+invariant to the overall level of mortality (Sec. 3.6).
+\code{ChiSquare} uses all cells (eq. 1).
+Version I tests (\code{WaldI_P}, \code{LRTI_P}, \code{BayesCI},
+\code{WaldI_NB}, \code{LRTI_NB}) test a constant deflator,
+\eqn{H_0: \beta = 0}; version II tests (\code{WaldII_P}, \code{LRTII_P},
+\code{WaldII_NB}, \code{LRTII_NB}) test a deflator linear in standardised
+age, \eqn{H_0: \beta_1 = \beta_2 = 0}, with the joint \eqn{\chi^2_2}
+statistic. Negative Binomial models estimate \eqn{\phi} jointly with
+\eqn{\beta} (profile likelihood). For \code{BayesCI} the value in
+\code{p_value} is the posterior tail probability \eqn{\pi} (eq. 10), not a
+frequentist p-value.
 
-Supply one row per (year, age) cell. Include a \code{year} column to make
-the structure explicit. If ages repeat without a year column, the function
-detects this automatically and treats each row as an independent cell.
+\strong{Samples without deaths (D = 0).} The Wald tests (versions I and II,
+Poisson and Negative Binomial) are not applicable and are reported as
+"N/A" (paper, Sec. 3.5). The LRT tests remain valid, with statistic 2Q.
 
-\strong{Custom / external tables:}
-
-Pass any \code{data.frame} with columns \code{age} and \code{qx} to the
-\code{table} argument. This allows testing against tables from external
-sources, regulatory bodies, or adjusted versions of built-in tables.
-
-\strong{The 11 tests:}
-\describe{
-  \item{\code{KS}}{Kolmogorov-Smirnov: compares the empirical cumulative
-    distribution of observed deaths with the table-implied distribution.}
-  \item{\code{ChiSquare}}{Chi-Square goodness-of-fit across all cells.}
-  \item{\code{WaldI_P}}{Wald Type I (Poisson): tests whether the global
-    log-scale adjustment is zero. Closed-form, no GLM required.}
-  \item{\code{WaldII_P}}{Wald Type II (Poisson): jointly tests intercept
-    and age slope via Poisson GLM.}
-  \item{\code{LRTI_P}}{Likelihood Ratio Test Type I (Poisson).}
-  \item{\code{LRTII_P}}{Likelihood Ratio Test Type II (Poisson GLM).}
-  \item{\code{BayesCI}}{Bayesian Credibility Interval: Gamma-Poisson
-    conjugate prior; rejects if the posterior CI for the global adjustment
-    factor excludes 1.}
-  \item{\code{WaldI_NB}}{Wald Type I (Negative Binomial) -- only run when
-    overdispersion is detected (dispersion ratio > 1).}
-  \item{\code{WaldII_NB}}{Wald Type II (Negative Binomial).}
-  \item{\code{LRTI_NB}}{LRT Type I (Negative Binomial).}
-  \item{\code{LRTII_NB}}{LRT Type II (Negative Binomial).}
-}
-
-Type I tests detect \emph{global} over- or under-estimation.
-Type II tests additionally detect \emph{age-systematic} bias.
-Negative Binomial tests are skipped with an informative message when
-no overdispersion is present.
+The same function, with the same results, is available in the Python
+version of the package.
 }
 \examples{
-# Simulate single-year pension fund data
 set.seed(42)
-ages    <- 50:80
-ref     <- loadTable("AT-2000m")
-sub     <- ref[ref$age \%in\% ages, ]
-exposed <- round(rlnorm(length(ages), meanlog = 5, sdlog = 0.4))
-deaths  <- rpois(length(ages), exposed * sub$qx)
+ages <- 40:80
+tab  <- loadTable("AT-2000m")
+qx   <- tab$qx[match(ages, tab$age)]
+fund <- do.call(rbind, lapply(2021:2023, function(y) {
+  E <- round(rlnorm(length(ages), 5, 0.4))
+  data.frame(year = y, age = ages, exposed = E, deaths = rpois(length(ages), E * qx))
+}))
+result <- testAdherence(fund, table = "AT-2000m")
+result
+result$summary
 
-fund <- data.frame(age = ages, exposed = exposed, deaths = deaths)
+# A deloaded table (10\% lower mortality)
+tab$qx <- tab$qx * 0.90
+testAdherence(fund, table = tab, quiet = TRUE)
 
-# Run all 11 tests
-result <- testAdherence(fund, table = "AT-2000m", alpha = 0.05)
-print(result)
-
-# Multi-year long-format data
-fund_multi <- rbind(
-  data.frame(year = 2022, age = ages, exposed = exposed, deaths = deaths),
-  data.frame(year = 2023, age = ages,
-             exposed = round(exposed * 1.05),
-             deaths  = rpois(length(ages), exposed * 1.05 * sub$qx))
-)
-result_multi <- testAdherence(fund_multi, table = "AT-2000m")
-print(result_multi)
-
-# External / custom table
-custom_tab <- loadTable("AT-2000m")
-custom_tab\$qx <- custom_tab\$qx * 0.90   # 10\% longevity improvement
-result_custom <- testAdherence(fund, table = custom_tab)
-print(result_custom)
-
+# No deaths: Wald tests are reported as N/A
+zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+testAdherence(zero, "AT-2000m", quiet = TRUE)
+}
+\references{
+de Melo, E.F.L., Graziadei, H. & Targino, R. (2026).
+  Annuity Table Validation in Pension Funds: A Comparative Power Analysis
+  of Goodness-of-Fit Tests. SSRN 6668699.
 }
 \seealso{
 \code{\link{listTables}}, \code{\link{loadTable}},
-\code{\link{loadFundData}}, \code{\link{printResult}}, \code{\link{htmlTable}}
+  \code{\link{loadFundData}}, \code{\link{printResult}},
+  \code{\link{htmlTable}}, \code{\link{exportExcel}}
 }

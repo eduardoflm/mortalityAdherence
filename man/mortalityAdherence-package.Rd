@@ -2,59 +2,54 @@
 % Please edit documentation in R/internal_tests.R
 \docType{package}
 \name{mortalityAdherence-package}
-\alias{mortalityAdherence-package}
 \alias{mortalityAdherence}
-\title{mortalityAdherence: Annuity/Mortality Table Adherence Testing for Pension Funds}
+\alias{mortalityAdherence-package}
+\title{mortalityAdherence: Statistical Validation of Mortality/Annuity Tables for Pension Funds}
 \description{
-The \pkg{mortalityAdherence} package provides actuaries with a complete
-toolkit for testing whether a biometric annuity/mortality table is statistically
-adherent to observed pension fund experience data.
-}
-\details{
-\strong{Main workflow:}
-\enumerate{
-  \item \code{\link{listTables}()} -- view the 10 built-in mortality tables
-  \item \code{\link{loadTable}()} -- retrieve a built-in table
-  \item \code{\link{loadFundData}()} -- import pension fund data from CSV/Excel
-  \item \code{\link{testAdherence}()} -- run all 11 statistical tests
-  \item \code{\link{printResult}()} -- display a formatted summary
-  \item \code{\link{htmlTable}()} -- render an HTML table for reports/Shiny
-}
+Implements the 11 goodness-of-fit tests of de Melo, Graziadei & Targino
+(2026), "Annuity Table Validation in Pension Funds: A Comparative Power
+Analysis of Goodness-of-Fit Tests", SSRN 6668699
+(\url{https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6668699}).
 
-\strong{11 statistical tests implemented:}
 \describe{
-  \item{Non-parametric}{KS (Kolmogorov-Smirnov), ChiSquare}
-  \item{Poisson -- Type I (global)}{WaldI_P, LRTI_P (closed-form)}
-  \item{Poisson -- Type II (age slope)}{WaldII_P, LRTII_P, BayesCI}
-  \item{Negative Binomial (overdispersion)}{WaldI_NB, WaldII_NB,
-    LRTI_NB, LRTII_NB (skipped automatically when no overdispersion)}
+  \item{Non-parametric}{\code{KS}, \code{ChiSquare}}
+  \item{Poisson, version I (global deflator)}{\code{WaldI_P}, \code{LRTI_P}}
+  \item{Poisson, version II (deflator linear in age)}{\code{WaldII_P}, \code{LRTII_P}}
+  \item{Bayesian (Gamma-Poisson, version I)}{\code{BayesCI}}
+  \item{Negative Binomial}{\code{WaldI_NB}, \code{WaldII_NB}, \code{LRTI_NB}, \code{LRTII_NB}}
+}
+}
+\section{Main workflow}{
+
+\enumerate{
+  \item \code{\link{listTables}()} -- the 10 built-in mortality tables
+  \item \code{\link{loadTable}()} -- one built-in table as \code{data.frame(age, qx)}
+  \item \code{\link{loadFundData}()} -- read pension fund data from CSV/Excel
+  \item \code{\link{testAdherence}()} -- run the 11 tests
+  \item \code{print()}, \code{\link{htmlTable}()}, \code{\link{exportExcel}()} -- results
 }
 
-\strong{Built-in tables:}
-AT-2000bm, AT-2000m, AT-49M, AT-55m, AT-83ms,
-GAM71m, GAM83m, BR-EMS2010, BR-EMS2015, BR-EMS2021.
-
-\strong{Reference paper:}
-de Melo, E.F.L., Graziadei, H. & Targino, R. (2026).
-\emph{Annuity Table Validation in Pension Funds: A Comparative Power
-Analysis of Goodness-of-Fit Tests.}
-SSRN Working Paper.
-\url{https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6668699}
+The Python version of the package (same functions, same results) is in the
+\code{python/} folder of the GitHub repository.
 }
+
 \seealso{
 Useful links:
 \itemize{
   \item \url{https://github.com/eduardoflm/mortalityAdherence}
   \item Report bugs at \url{https://github.com/eduardoflm/mortalityAdherence/issues}
 }
+
 }
 \author{
-\strong{Maintainer}: Eduardo Fraga L. de Melo
+\strong{Maintainer}: Eduardo Fraga L. de Melo \email{eduardofraga@ime.uerj.br} (Affiliation: UERJ / FGV-EMAp / SUSEP)
 
 Authors:
 \itemize{
-  \item Eduardo Fraga L. de Melo (UERJ / FGV-EMAp / SUSEP)
-  \item Helton Graziadei (Federal University at Sao Carlos - UFSCar)
-  \item Rodrigo Targino (FGV-EMAp)
+  \item Eduardo Fraga L. de Melo \email{eduardofraga@ime.uerj.br} (Affiliation: UERJ / FGV-EMAp / SUSEP)
+  \item Helton Graziadei (Affiliation: Federal University at Sao Carlos - UFSCar)
+  \item Rodrigo Targino (Affiliation: FGV-EMAp)
 }
+
 }
+\keyword{internal}

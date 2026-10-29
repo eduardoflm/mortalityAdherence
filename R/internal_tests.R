@@ -1,280 +1,332 @@
-#' mortalityAdherence: Biometric Table Adherence Testing for Pension Funds
+#' mortalityAdherence: Statistical Validation of Mortality/Annuity Tables for Pension Funds
 #'
 #' @description
-#' The \pkg{mortalityAdherence} package provides actuaries with a complete
-#' toolkit for testing whether a biometric mortality table is statistically
-#' adherent to observed pension fund experience data.
-#'
-#' It implements 11 statistical tests organised in four families:
+#' Implements the 11 goodness-of-fit tests of de Melo, Graziadei & Targino
+#' (2026), "Annuity Table Validation in Pension Funds: A Comparative Power
+#' Analysis of Goodness-of-Fit Tests", SSRN 6668699
+#' (\url{https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6668699}).
 #'
 #' \describe{
-#'   \item{Non-parametric}{
-#'     \code{KS} (Kolmogorov-Smirnov),
-#'     \code{ChiSquare}
-#'   }
-#'   \item{Poisson — closed-form (Type I)}{
-#'     \code{WaldI_P}, \code{LRTI_P}
-#'   }
-#'   \item{Poisson — GLM with age slope (Type II) + Bayesian}{
-#'     \code{WaldII_P}, \code{LRTII_P}, \code{BayesCI}
-#'   }
-#'   \item{Negative Binomial (overdispersion-robust)}{
-#'     \code{WaldI_NB}, \code{WaldII_NB}, \code{LRTI_NB}, \code{LRTII_NB}
-#'   }
+#'   \item{Non-parametric}{\code{KS}, \code{ChiSquare}}
+#'   \item{Poisson, version I (global deflator)}{\code{WaldI_P}, \code{LRTI_P}}
+#'   \item{Poisson, version II (deflator linear in age)}{\code{WaldII_P}, \code{LRTII_P}}
+#'   \item{Bayesian (Gamma-Poisson, version I)}{\code{BayesCI}}
+#'   \item{Negative Binomial}{\code{WaldI_NB}, \code{WaldII_NB}, \code{LRTI_NB}, \code{LRTII_NB}}
 #' }
 #'
 #' @section Main workflow:
 #' \enumerate{
-#'   \item \code{\link{listTables}()} — view the 10 built-in mortality tables
-#'   \item \code{\link{loadTable}()} — retrieve a built-in table as a data frame
-#'   \item \code{\link{loadFundData}()} — import pension fund data from CSV/Excel
-#'   \item \code{\link{testAdherence}()} — run all 11 tests
-#'   \item \code{\link{printResult}()} — display a formatted summary
-#'   \item \code{\link{htmlTable}()} — render an HTML table for reports/Shiny
+#'   \item \code{\link{listTables}()} -- the 10 built-in mortality tables
+#'   \item \code{\link{loadTable}()} -- one built-in table as \code{data.frame(age, qx)}
+#'   \item \code{\link{loadFundData}()} -- read pension fund data from CSV/Excel
+#'   \item \code{\link{testAdherence}()} -- run the 11 tests
+#'   \item \code{print()}, \code{\link{htmlTable}()}, \code{\link{exportExcel}()} -- results
 #' }
 #'
-#' @section Built-in tables:
-#' AT-2000bm, AT-2000m, AT-49M, AT-55m, AT-83ms,
-#' GAM71m, GAM83m, BR-EMS2010, BR-EMS2015, BR-EMS2021.
+#' The Python version of the package (same functions, same results) is in the
+#' \code{python/} folder of the GitHub repository.
 #'
-#' @docType package
-#' @name mortalityAdherence-package
-#' @aliases mortalityAdherence
+#' @keywords internal
 "_PACKAGE"
 
 
 # =============================================================================
-# SECTION 1 — INTERNAL STATISTICAL TEST FUNCTIONS
-# =============================================================================
-# Naming convention: .test_*  for single-test functions
-# All functions return a named list with fields:
-#   reject     : logical (TRUE = reject H0)
-#   statistic  : numeric test statistic (NA when not applicable)
-#   p_value    : numeric p-value         (NA when not applicable)
-#   ... extra fields depend on the test
+# Internal statistical routines. Notation follows the paper:
+#   cells C = {(x,t): E_{x,t} > 0}, D = sum d, Q = sum E q,
+#   g_x = (x - mean(ages)) / sd(ages), ages = distinct ages in the data.
+# Every test returns list(reject, statistic, p_value, df, note);
+# reject = NA means "not applicable" (N/A).
+# The same algorithms are used in the Python version of the package.
 # =============================================================================
 
+.na_test <- function(note = "", df = NA_real_) {
+  list(reject = NA, statistic = NA_real_, p_value = NA_real_, df = df, note = note)
+}
 
-# --- 1.1  Kolmogorov-Smirnov -------------------------------------------------
+.ZERO_DEATHS_WALD <- paste0(
+  "No deaths in the sample (D = 0): Wald tests are not applicable ",
+  "(de Melo et al., 2026, Sec. 3.5).")
 
-#' @noRd
-.test_ks <- function(deaths, expected, alpha) {
-  N <- sum(deaths)
-  if (N <= 0L) {
-    return(list(reject = NA, statistic = NA_real_, p_value = NA_real_,
-                critical = NA_real_))
+.xlogy <- function(x, y) ifelse(x == 0, 0, x * log(y))
+
+
+# ---- Kolmogorov-Smirnov -----------------------------------------------------
+
+# Identical to sfsmisc::KSd(n): 5% critical value of the KS statistic
+.ks_crit_005 <- function(n) {
+  if (n > 80) return(1.358 / (sqrt(n) + 0.12 + 0.11 / sqrt(n)))
+  stats::splinefun(c(1:9, 10, 15, 10 * 2:8),
+                   c(.975, .84189, .70760, .62394, .56328,
+                     .51926, .48342, .45427, .43001, .40925,
+                     .33760, .29408, .24170, .21012,
+                     .18841, .17231, .15975, .14960))(n)
+}
+
+# Upper tail of the Kolmogorov distribution, P(K > x)
+.kolm_sf <- function(x) {
+  if (x <= 0) return(1)
+  k <- 1:100
+  if (x < 1) {
+    cdf <- sqrt(2 * pi) / x * sum(exp(-(2 * k - 1)^2 * pi^2 / (8 * x^2)))
+    return(min(max(1 - cdf, 0), 1))
   }
-  Q      <- sum(expected)
-  px_cum <- cumsum(expected / Q)
-  D_stat <- max(abs(cumsum(deaths) / N - px_cum))
-  D_crit <- sfsmisc::KSd(n = N)
-  list(
-    reject    = D_stat > D_crit,
-    statistic = round(D_stat, 6),
-    p_value   = NA_real_,
-    critical  = round(D_crit, 6)
-  )
+  min(max(2 * sum((-1)^(k - 1) * exp(-2 * k^2 * x^2)), 0), 1)
+}
+
+.ks_crit <- function(n, alpha) {
+  if (abs(alpha - 0.05) < 1e-12) return(.ks_crit_005(n))
+  c_alpha <- stats::uniroot(function(z) .kolm_sf(z) - alpha, c(0.2, 10),
+                            tol = 1e-12)$root
+  c_alpha / (sqrt(n) + 0.12 + 0.11 / sqrt(n))
+}
+
+# KS on the age margins (paper, eq. 2)
+.test_ks <- function(d_age, mu_age, alpha) {
+  D <- sum(d_age)
+  if (D <= 0) return(.na_test("No deaths in the sample: KS statistic undefined."))
+  ks <- max(abs(cumsum(d_age) / D - cumsum(mu_age) / sum(mu_age)))
+  crit <- .ks_crit(D, alpha)
+  sqn <- sqrt(D)
+  p_approx <- .kolm_sf(ks * (sqn + 0.12 + 0.11 / sqn))
+  list(reject = ks > crit, statistic = ks, p_value = p_approx, df = NA_real_,
+       critical = crit,
+       note = sprintf("Critical value = %.4f (p-value approx.)", crit))
 }
 
 
-# --- 1.2  Chi-Square ---------------------------------------------------------
+# ---- Chi-squared (paper, eq. 1) -----------------------------------------------
 
-#' @noRd
-.test_chisq <- function(deaths, expected, alpha) {
-  X2 <- sum((deaths - expected)^2 / pmax(expected, 1e-12))
-  df <- length(deaths) - 1L
-  pv <- stats::pchisq(X2, df = df, lower.tail = FALSE)
-  list(
-    reject    = pv < alpha,
-    statistic = round(X2, 4),
-    p_value   = round(pv, 6),
-    df        = df
-  )
+.test_chisq <- function(d, mu0, alpha, df_rule = "k-1") {
+  k <- length(d)
+  X2 <- sum((d - mu0)^2 / pmax(mu0, 1e-12))
+  df <- if (df_rule == "k-1") k - 1 else k
+  pv <- stats::pchisq(X2, df, lower.tail = FALSE)
+  n_small <- sum(mu0 < 1)
+  note <- sprintf("df = %d (%s)", as.integer(df), df_rule)
+  if (n_small > 0)
+    note <- paste0(note, sprintf("; %d of %d cells with expected deaths < 1", n_small, k))
+  list(reject = pv < alpha, statistic = X2, p_value = pv, df = df, note = note)
 }
 
 
-# --- 1.3  Poisson family (Wald I/II, LRT I/II, Bayesian CI) -----------------
-# Type I (intercept only) uses closed-form expressions — no GLM needed.
-# Type II (intercept + age slope) shares a single GLM fit for both Wald and LRT.
+# ---- Poisson GLM with offset (Newton-Raphson with step halving) ----------------
 
-#' @noRd
-.test_poisson_family <- function(deaths, log_offset, expected, z_age, alpha) {
+.pois_ll <- function(d, mu) sum(.xlogy(d, pmax(mu, 1e-300)) - mu - lgamma(d + 1))
 
-  D <- sum(deaths)
-  Q <- sum(expected)
-  ctrl <- stats::glm.control(maxit = 50, epsilon = 1e-8)
-
-  # ---- Wald Type I  (closed-form) ----------------------------------------
-  beta_hat <- log(D / pmax(Q, 1e-12))
-  se_hat   <- 1 / sqrt(pmax(D, 1))        # delta method: se(log D) = 1/sqrt(D)
-  z_stat   <- beta_hat / se_hat
-  pv_w1    <- 2 * stats::pnorm(abs(z_stat), lower.tail = FALSE)
-  wald_I <- list(reject    = pv_w1 < alpha,
-                 statistic = round(z_stat, 4),
-                 p_value   = round(pv_w1, 6))
-
-  # ---- LRT Type I  (closed-form) -----------------------------------------
-  lrt1_stat <- if (D <= 0) 0 else
-    max(2 * (D * log(pmax(D / Q, 1e-12)) - (D - Q)), 0)
-  pv_l1 <- stats::pchisq(lrt1_stat, df = 1L, lower.tail = FALSE)
-  lrt_I <- list(reject    = pv_l1 < alpha,
-                statistic = round(lrt1_stat, 4),
-                p_value   = round(pv_l1, 6))
-
-  # ---- GLM Poisson — shared for Wald II and LRT II -----------------------
-  fit_full <- tryCatch(
-    stats::glm(deaths ~ z_age, offset = log_offset,
-               family = stats::poisson, control = ctrl),
-    error = function(e) NULL
-  )
-  fit_null <- tryCatch(
-    stats::glm(deaths ~ 0,    offset = log_offset,
-               family = stats::poisson, control = ctrl),
-    error = function(e) NULL
-  )
-
-  # ---- Wald Type II  (GLM-based) -----------------------------------------
-  pv_w2 <- tryCatch(
-    car::linearHypothesis(
-      fit_full,
-      c("(Intercept) = 0", "z_age = 0")
-    )$`Pr(>Chisq)`[2],
-    error = function(e) NA_real_
-  )
-  wald_II <- list(reject    = !is.na(pv_w2) && pv_w2 < alpha,
-                  statistic = NA_real_,
-                  p_value   = round(pv_w2, 6))
-
-  # ---- LRT Type II  (GLM-based) ------------------------------------------
-  lrt2_stat <- if (!is.null(fit_null) && !is.null(fit_full))
-    max(stats::deviance(fit_null) - stats::deviance(fit_full), 0)
-  else NA_real_
-  pv_l2 <- if (!is.na(lrt2_stat))
-    stats::pchisq(lrt2_stat, df = 2L, lower.tail = FALSE)
-  else NA_real_
-  lrt_II <- list(reject    = !is.na(pv_l2) && pv_l2 < alpha,
-                 statistic = round(lrt2_stat, 4),
-                 p_value   = round(pv_l2, 6))
-
-  # ---- Bayesian Credibility Interval  (Gamma-Poisson conjugate) ----------
-  # Prior: moment-matched Gamma from per-age ratios d_x / mu_x
-  theta   <- deaths / pmax(expected, 1e-12)
-  m       <- mean(theta)
-  v       <- stats::var(theta)
-  alpha0  <- m^2 / pmax(v, 1e-12)
-  beta0   <- m   / pmax(v, 1e-12)
-  alpha_p <- alpha0 + D
-  beta_p  <- beta0  + Q
-  ci_lo   <- stats::qgamma(alpha / 2,       alpha_p, beta_p)
-  ci_hi   <- stats::qgamma(1 - alpha / 2,   alpha_p, beta_p)
-  bayes_ci <- list(reject    = (ci_lo > 1) | (ci_hi < 1),
-                   statistic = NA_real_,
-                   p_value   = NA_real_,
-                   ci_lower  = round(ci_lo, 4),
-                   ci_upper  = round(ci_hi, 4))
-
-  list(WaldI_P  = wald_I,
-       WaldII_P = wald_II,
-       LRTI_P   = lrt_I,
-       LRTII_P  = lrt_II,
-       BayesCI  = bayes_ci)
+.fit_pois <- function(d, off, X, maxit = 100, tol = 1e-10) {
+  beta <- rep(0, ncol(X))
+  D <- sum(d); Q <- sum(exp(off))
+  if (D > 0 && all(X[, 1] == 1)) beta[1] <- log(D / Q)
+  ll <- function(b) .pois_ll(d, exp(off + drop(X %*% b)))
+  cur <- ll(beta)
+  for (it in seq_len(maxit)) {
+    mu <- exp(off + drop(X %*% beta))
+    score <- drop(crossprod(X, d - mu))
+    info <- crossprod(X, mu * X)
+    step <- tryCatch(solve(info, score), error = function(e) NULL)
+    if (is.null(step)) break
+    t <- 1
+    repeat {
+      new <- beta + t * step; val <- ll(new)
+      if (val >= cur - 1e-12 || t < 1e-8) break
+      t <- t / 2
+    }
+    delta <- abs(val - cur); beta <- new; cur <- val
+    if (delta < tol * (abs(cur) + tol)) break
+  }
+  mu <- exp(off + drop(X %*% beta))
+  list(beta = beta, mu = mu, loglik = cur, info = crossprod(X, mu * X))
 }
 
 
-# --- 1.4  Negative Binomial family (Wald I/II, LRT I/II) --------------------
+# ---- Negative Binomial (NB2) by profile likelihood -----------------------------
 
-#' @noRd
-.test_nb_family <- function(deaths, log_offset, z_age, alpha) {
+.nb_ll <- function(d, mu, phi) {
+  mu <- pmax(mu, 1e-300)
+  sum(lgamma(d + phi) - lgamma(phi) - lgamma(d + 1) +
+        .xlogy(d, mu / (phi + mu)) + phi * log(phi / (phi + mu)))
+}
 
-  na_res <- list(reject = NA, statistic = NA_real_, p_value = NA_real_)
+.nb_beta_given_phi <- function(d, off, X, phi, beta0, maxit = 100, tol = 1e-11) {
+  beta <- beta0
+  ll <- function(b) .nb_ll(d, exp(off + drop(X %*% b)), phi)
+  cur <- ll(beta)
+  for (it in seq_len(maxit)) {
+    mu <- exp(off + drop(X %*% beta))
+    score <- drop(crossprod(X, (d - mu) / (1 + mu / phi)))
+    h <- phi * mu * (d + phi) / (phi + mu)^2
+    info <- crossprod(X, h * X)
+    step <- tryCatch(solve(info, score), error = function(e) NULL)
+    if (is.null(step)) break
+    t <- 1
+    repeat {
+      new <- beta + t * step; val <- ll(new)
+      if (val >= cur - 1e-12 || t < 1e-8) break
+      t <- t / 2
+    }
+    delta <- abs(val - cur); beta <- new; cur <- val
+    if (delta < tol * (abs(cur) + tol)) break
+  }
+  list(beta = beta, loglik = cur)
+}
 
-  # --- Test for overdispersion before fitting NB models ---
-  # Fit a Poisson GLM and compute the dispersion ratio: sum(pearson^2) / df
-  # If dispersion <= 1, data are NOT overdispersed; NB is not appropriate.
-  fit_pois <- tryCatch(
-    stats::glm(deaths ~ 1 + offset(log_offset), family = stats::poisson),
-    error = function(e) NULL
-  )
+# Joint MLE of (beta, phi): beta profiled for each phi, then the profile
+# log-likelihood is maximised over log(phi) (grid + Brent).
+# X = NULL is the H0 model (beta = 0, only phi re-estimated; paper eq. 12).
+.fit_nb <- function(d, off, X = NULL) {
+  lo_b <- log(1e-6); hi_b <- log(1e10)
+  p <- if (is.null(X)) 0L else ncol(X)
+  start <- if (p > 0) .fit_pois(d, off, X)$beta else numeric(0)
+  prof <- function(lphi) {
+    phi <- exp(lphi)
+    if (p == 0) list(beta = numeric(0), loglik = .nb_ll(d, exp(off), phi))
+    else .nb_beta_given_phi(d, off, X, phi, start)
+  }
+  grid <- seq(lo_b, hi_b, length.out = 49)
+  vals <- vapply(grid, function(g) prof(g)$loglik, numeric(1))
+  i <- which.max(vals)
+  lo <- grid[max(i - 1, 1)]; hi <- grid[min(i + 1, length(grid))]
+  opt <- stats::optimize(function(g) -prof(g)$loglik, c(lo, hi), tol = 1e-9)
+  best <- if (-opt$objective >= vals[i]) opt$minimum else grid[i]
+  # The profile is flat as phi -> infinity (no overdispersion): report the
+  # Poisson limit deterministically, at the upper bound phi = 1e10.
+  if (best > log(1e8)) best <- hi_b
+  fit <- prof(best)
+  phi <- exp(best)
+  mu <- if (p > 0) exp(off + drop(X %*% fit$beta)) else exp(off)
+  info <- if (p > 0) crossprod(X, (mu / (1 + mu / phi)) * X) else NULL
+  list(beta = fit$beta, phi = phi, mu = mu, loglik = fit$loglik, info = info,
+       phi_at_boundary = best >= hi_b)
+}
 
-  if (is.null(fit_pois)) {
-    message("  [NB tests] Could not fit baseline Poisson model. NB tests skipped.")
-    return(list(WaldI_NB  = na_res, WaldII_NB = na_res,
-                LRTI_NB   = na_res, LRTII_NB  = na_res))
+
+# ---- Poisson family + Bayesian CI ---------------------------------------------
+
+.poisson_family <- function(d, mu0, g, alpha, d_age, mu_age) {
+  D <- sum(d); Q <- sum(mu0)
+  off <- log(pmax(mu0, 1e-300))
+  out <- list()
+
+  # Wald I (eq. 8): log(D/Q) sqrt(D); not applicable when D = 0 (Sec. 3.5)
+  if (D == 0) {
+    out$WaldI_P <- .na_test(.ZERO_DEATHS_WALD, 1)
+  } else {
+    W <- log(D / Q) * sqrt(D)
+    pv <- 2 * stats::pnorm(abs(W), lower.tail = FALSE)
+    out$WaldI_P <- list(reject = pv < alpha, statistic = W, p_value = pv, df = 1, note = "")
   }
 
-  pearson_chi2 <- sum(stats::residuals(fit_pois, type = "pearson")^2)
-  df_resid     <- stats::df.residual(fit_pois)
-  dispersion   <- pearson_chi2 / df_resid
+  # LRT I (eq. 11); D = 0 gives 2Q
+  lam1 <- max(2 * (if (D == 0) Q else D * log(D / Q) - (D - Q)), 0)
+  pv <- stats::pchisq(lam1, 1, lower.tail = FALSE)
+  out$LRTI_P <- list(reject = pv < alpha, statistic = lam1, p_value = pv, df = 1,
+                     note = if (D == 0) "D = 0: statistic = 2Q" else "")
 
-  if (dispersion <= 1) {
-    message(sprintf(paste0(
-      "  [NB tests] No overdispersion detected (dispersion ratio = %.4f <= 1.0).\n",
-      "  Negative Binomial tests are not applicable and have been skipped.\n",
-      "  The Poisson-based tests are appropriate for these data."
-    ), dispersion))
-    return(list(WaldI_NB  = na_res, WaldII_NB = na_res,
-                LRTI_NB   = na_res, LRTII_NB  = na_res))
+  # Version II (eqs. 13-14)
+  if (D == 0) {
+    out$WaldII_P <- .na_test(.ZERO_DEATHS_WALD, 2)
+    pv <- stats::pchisq(2 * Q, 2, lower.tail = FALSE)
+    out$LRTII_P <- list(reject = pv < alpha, statistic = 2 * Q, p_value = pv, df = 2,
+                        note = "D = 0: statistic = 2Q")
+  } else {
+    fit <- .fit_pois(d, off, cbind(1, g))
+    b <- fit$beta
+    W2 <- drop(t(b) %*% fit$info %*% b)
+    pv <- stats::pchisq(W2, 2, lower.tail = FALSE)
+    out$WaldII_P <- list(reject = pv < alpha, statistic = W2, p_value = pv, df = 2,
+                         note = "", beta = b)
+    lam2 <- max(2 * (fit$loglik - .pois_ll(d, mu0)), 0)
+    pv <- stats::pchisq(lam2, 2, lower.tail = FALSE)
+    out$LRTII_P <- list(reject = pv < alpha, statistic = lam2, p_value = pv, df = 2,
+                        note = "")
   }
 
-  # Overdispersion confirmed — proceed with NB fitting
-  ctrl <- stats::glm.control(maxit = 200, epsilon = 1e-7)
+  out$BayesCI <- .bayes_ci(d_age, mu_age, D, Q, alpha)
+  out[c("WaldI_P", "WaldII_P", "LRTI_P", "LRTII_P", "BayesCI")]
+}
 
-  fit0  <- tryCatch(MASS::glm.nb(deaths ~ 0 + offset(log_offset), control = ctrl),
-                    error = function(e) NULL, warning = function(w) NULL)
-  fit1a <- tryCatch(MASS::glm.nb(deaths ~ 1 + offset(log_offset), control = ctrl),
-                    error = function(e) NULL, warning = function(w) NULL)
-  fit1b <- tryCatch(MASS::glm.nb(deaths ~ z_age + offset(log_offset), control = ctrl),
-                    error = function(e) NULL, warning = function(w) NULL)
+# Empirical-Bayes Gamma prior from the age-specific ratios (Sec. 3.2, eq. 9).
+# p_value = posterior tail probability pi (eq. 10), not a frequentist p-value.
+.bayes_ci <- function(d_age, mu_age, D, Q, alpha) {
+  th <- d_age / pmax(mu_age, 1e-300)
+  m <- if (length(th) >= 2) mean(th) else 0
+  v <- if (length(th) >= 2) stats::var(th) else 0
+  note_prior <- ""
+  if (m > 0 && v > 0) {
+    a0 <- m^2 / v; b0 <- m / v
+  } else {
+    # degenerate sample (e.g. D = 0): near-noninformative reference prior,
+    # which the empirical-Bayes prior tracks (paper, Sec. 3.2)
+    a0 <- b0 <- 0.001
+    note_prior <- "; degenerate sample: reference prior a0 = b0 = 0.001 used"
+  }
+  ap <- a0 + D; bp <- b0 + Q
+  lo <- stats::qgamma(alpha / 2, ap, bp)
+  hi <- stats::qgamma(1 - alpha / 2, ap, bp)
+  pi_tail <- min(2 * min(stats::pgamma(1, ap, bp),
+                         stats::pgamma(1, ap, bp, lower.tail = FALSE)), 1)
+  list(reject = (lo > 1) || (hi < 1), statistic = NA_real_, p_value = pi_tail,
+       df = NA_real_, ci_lower = lo, ci_upper = hi, a0 = a0, b0 = b0,
+       note = paste0(sprintf("%d%% CI: [%.4f, %.4f]; posterior tail prob.",
+                             as.integer(round(100 * (1 - alpha))), lo, hi), note_prior))
+}
 
-  # ---- Wald Type I NB -----------------------------------------------------
-  if (!is.null(fit1a)) {
-    sm <- tryCatch(stats::coef(summary(fit1a))[1L, ], error = function(e) NULL)
-    if (!is.null(sm) && !anyNA(sm[c("Estimate", "Std. Error")])) {
-      z_val  <- sm["Estimate"] / sm["Std. Error"]
-      pv     <- 2 * stats::pnorm(abs(z_val), lower.tail = FALSE)
-      wald_I <- list(reject    = !is.na(pv) && pv < alpha,
-                     statistic = round(as.numeric(z_val), 4),
-                     p_value   = round(as.numeric(pv), 6))
-    } else { wald_I <- na_res }
-  } else { wald_I <- na_res }
 
-  # ---- LRT Type I NB ------------------------------------------------------
-  if (!is.null(fit0) && !is.null(fit1a)) {
-    lam <- tryCatch(
-      max(2 * (as.numeric(stats::logLik(fit1a)) - as.numeric(stats::logLik(fit0))), 0),
-      error = function(e) NA_real_
-    )
-    if (!is.na(lam)) {
-      pv    <- stats::pchisq(lam, df = 1L, lower.tail = FALSE)
-      lrt_I <- list(reject = pv < alpha, statistic = round(lam, 4), p_value = round(pv, 6))
-    } else { lrt_I <- na_res }
-  } else { lrt_I <- na_res }
+# ---- Negative Binomial family -----------------------------------------------
 
-  # ---- Wald Type II NB ----------------------------------------------------
-  if (!is.null(fit1b)) {
-    pv <- tryCatch(
-      car::linearHypothesis(fit1b, c("(Intercept) = 0", "z_age = 0"))$`Pr(>Chisq)`[2],
-      error = function(e) NA_real_, warning = function(w) NA_real_
-    )
-    wald_II <- list(reject    = !is.na(pv) && pv < alpha,
-                    statistic = NA_real_,
-                    p_value   = round(as.numeric(pv), 6))
-  } else { wald_II <- na_res }
+# Pearson chi2 / df of the intercept-only Poisson model
+.dispersion_ratio <- function(d, mu0) {
+  D <- sum(d); k <- length(d)
+  if (D <= 0 || k < 2) return(NA_real_)
+  mu_hat <- mu0 * D / sum(mu0)
+  sum((d - mu_hat)^2 / mu_hat) / (k - 1)
+}
 
-  # ---- LRT Type II NB -----------------------------------------------------
-  if (!is.null(fit0) && !is.null(fit1b)) {
-    lam <- tryCatch(
-      max(2 * (as.numeric(stats::logLik(fit1b)) - as.numeric(stats::logLik(fit0))), 0),
-      error = function(e) NA_real_
-    )
-    if (!is.na(lam)) {
-      pv     <- stats::pchisq(lam, df = 2L, lower.tail = FALSE)
-      lrt_II <- list(reject = pv < alpha, statistic = round(lam, 4), p_value = round(pv, 6))
-    } else { lrt_II <- na_res }
-  } else { lrt_II <- na_res }
+.nb_family <- function(d, mu0, g, alpha, skip_reason = NULL) {
+  nms <- c("WaldI_NB", "WaldII_NB", "LRTI_NB", "LRTII_NB")
+  dfs <- c(1, 2, 1, 2)
+  if (!is.null(skip_reason))
+    return(stats::setNames(lapply(dfs, function(k) .na_test(skip_reason, k)), nms))
 
-  list(WaldI_NB  = wald_I,
-       WaldII_NB = wald_II,
-       LRTI_NB   = lrt_I,
-       LRTII_NB  = lrt_II)
+  D <- sum(d); Q <- sum(mu0)
+  out <- list()
+  if (D == 0) {   # phi-hat -> infinity: NB likelihood reduces to the Poisson one
+    out$WaldI_NB  <- .na_test(.ZERO_DEATHS_WALD, 1)
+    out$WaldII_NB <- .na_test(.ZERO_DEATHS_WALD, 2)
+    for (k in 1:2) {
+      pv <- stats::pchisq(2 * Q, k, lower.tail = FALSE)
+      out[[c("LRTI_NB", "LRTII_NB")[k]]] <- list(
+        reject = pv < alpha, statistic = 2 * Q, p_value = pv, df = k,
+        note = "D = 0: phi -> inf, statistic = 2Q")
+    }
+    return(out[nms])
+  }
+
+  off <- log(pmax(mu0, 1e-300))
+  f0 <- .fit_nb(d, off, NULL)
+  f1 <- .fit_nb(d, off, matrix(1, length(d), 1))
+  f2 <- .fit_nb(d, off, cbind(1, g))
+  phi_note <- function(f) if (f$phi_at_boundary) "phi at boundary (Poisson limit)"
+                          else sprintf("phi = %.2f", f$phi)
+
+  z <- f1$beta[1] * sqrt(f1$info[1, 1])
+  pv <- 2 * stats::pnorm(abs(z), lower.tail = FALSE)
+  out$WaldI_NB <- list(reject = pv < alpha, statistic = z, p_value = pv, df = 1,
+                       note = phi_note(f1), phi = f1$phi)
+
+  W2 <- drop(t(f2$beta) %*% f2$info %*% f2$beta)
+  pv <- stats::pchisq(W2, 2, lower.tail = FALSE)
+  out$WaldII_NB <- list(reject = pv < alpha, statistic = W2, p_value = pv, df = 2,
+                        note = phi_note(f2), phi = f2$phi, beta = f2$beta)
+
+  lam <- max(2 * (f1$loglik - f0$loglik), 0)
+  pv <- stats::pchisq(lam, 1, lower.tail = FALSE)
+  out$LRTI_NB <- list(reject = pv < alpha, statistic = lam, p_value = pv, df = 1,
+                      note = phi_note(f1))
+
+  lam <- max(2 * (f2$loglik - f0$loglik), 0)
+  pv <- stats::pchisq(lam, 2, lower.tail = FALSE)
+  out$LRTII_NB <- list(reject = pv < alpha, statistic = lam, p_value = pv, df = 2,
+                       note = phi_note(f2))
+  out[nms]
 }

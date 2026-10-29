@@ -10,42 +10,23 @@ printResult(x, show_notes = TRUE, ...)
 \method{print}{adherence_result}(x, ...)
 }
 \arguments{
-\item{x}{An object of class \code{adherence_result} returned by
-\code{\link{testAdherence}()}.}
+\item{x}{An \code{adherence_result} returned by \code{\link{testAdherence}()}.}
 
-\item{show_notes}{\code{logical} -- whether to print additional notes
-such as the KS critical value and Bayesian CI bounds. Default: \code{TRUE}.}
+\item{show_notes}{Print the note under each test (default \code{TRUE}).}
 
-\item{...}{Currently unused.}
+\item{...}{Not used.}
 }
 \value{
-Invisibly returns \code{x}.
+\code{x}, invisibly.
 }
 \description{
-Displays a formatted summary of all 11 statistical adherence tests
-to the R console, grouped by test family, with a final verdict on
-table adherence.
-}
-\details{
-The verdict is determined by the number of tests that reject H0:
-\itemize{
-  \item 0 rejections -- GOOD ADHERENCE
-  \item 1-3 rejections -- PARTIAL ADHERENCE (review critical age groups)
-  \item 4+ rejections -- POOR ADHERENCE (consider a different table)
-}
-
-The dispersion ratio is shown in the header to indicate whether
-Negative Binomial tests were applicable.
+Prints the formatted report of an \code{adherence_result}: header with
+\eqn{D}, \eqn{Q}, A/E ratio, dispersion ratio and minimum detectable
+deflator, the 11 tests grouped by family, and the verdict.
+\code{print(result)} does the same.
 }
 \examples{
-\dontrun{
-result <- testAdherence(fund_data, table = "AT-2000m")
-printResult(result)
-
-# Suppress notes (KS critical value, Bayesian CI bounds)
-printResult(result, show_notes = FALSE)
-}
-}
-\seealso{
-\code{\link{testAdherence}}, \code{\link{htmlTable}}
+zero <- data.frame(age = 40:55, exposed = 800, deaths = 0)
+r <- testAdherence(zero, "AT-2000m", quiet = TRUE)
+printResult(r, show_notes = FALSE)
 }

@@ -15,7 +15,7 @@ Quick start
 >>> data = ma.loadFundData("my_fund.csv")            # year, age, exposed, deaths
 >>> result = ma.testAdherence(data, table="AT-2000m")
 >>> print(result)
->>> result.to_excel("results.xlsx")
+>>> ma.exportExcel(result, "results.xlsx")   # or result.to_excel(...)
 
 Function names follow the R package (camelCase); snake_case aliases are
 also provided (test_adherence, list_tables, load_table, load_fund_data, ...).
@@ -23,10 +23,10 @@ also provided (test_adherence, list_tables, load_table, load_fund_data, ...).
 
 from ._adherence import AdherenceResult, testAdherence
 from ._io import loadFundData
-from ._report import htmlTable, printResult
+from ._report import exportExcel, htmlTable, printResult
 from ._tables import listTables, loadTable, mortality_tables
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # snake_case aliases (Python convention)
 test_adherence = testAdherence
@@ -35,10 +35,11 @@ load_table = loadTable
 load_fund_data = loadFundData
 print_result = printResult
 html_table = htmlTable
+export_excel = exportExcel
 
 __all__ = [
     "testAdherence", "listTables", "loadTable", "loadFundData", "printResult",
-    "htmlTable", "mortality_tables", "AdherenceResult",
+    "htmlTable", "exportExcel", "mortality_tables", "AdherenceResult",
     "test_adherence", "list_tables", "load_table", "load_fund_data",
-    "print_result", "html_table", "__version__",
+    "print_result", "html_table", "export_excel", "__version__",
 ]

@@ -13,56 +13,41 @@ loadFundData(
   sep = ",",
   dec = ".",
   sheet = 1L,
+  quiet = FALSE,
   ...
 )
 }
 \arguments{
-\item{file}{\code{character} -- path to the input file.
-Supported formats: \code{.csv}, \code{.xlsx}, \code{.xls}.}
+\item{file}{Path to the file.}
 
-\item{col_year}{\code{character} -- name of the year column in the file.
-Default: \code{"year"}. Set to \code{NULL} to ignore a year column even
-if one exists.}
+\item{col_year}{Name of the year column (\code{NULL} to ignore it).}
 
-\item{col_age}{\code{character} -- name of the age column.
-Default: \code{"age"}.}
+\item{col_age, col_exposed, col_deaths}{Names of the age, exposed and deaths
+columns in the file.}
 
-\item{col_exposed}{\code{character} -- name of the exposed lives column.
-Default: \code{"exposed"}.}
+\item{sep, dec}{Field and decimal separators for CSV files. Brazilian CSV:
+\code{sep = ";", dec = ","}.}
 
-\item{col_deaths}{\code{character} -- name of the observed deaths column.
-Default: \code{"deaths"}.}
+\item{sheet}{Excel sheet (number, starting at 1, or name).}
 
-\item{sep}{\code{character} -- field separator for CSV files.
-Default: \code{","} (use \code{";"} for Brazilian locale files).}
+\item{quiet}{Suppress the summary message.}
 
-\item{dec}{\code{character} -- decimal separator for CSV files.
-Default: \code{"."} (use \code{","} for Brazilian locale files).}
-
-\item{sheet}{\code{integer} or \code{character} -- sheet to read from
-Excel files. Default: \code{1}.}
-
-\item{...}{Additional arguments passed to \code{utils::read.csv()} or
-\code{readxl::read_excel()}.}
+\item{...}{Passed to \code{utils::read.csv()} or \code{readxl::read_excel()}.}
 }
 \value{
-A \code{data.frame} with columns \code{year} (if detected),
-\code{age}, \code{exposed}, and \code{deaths}. Each row represents
-one independent cell (year-age combination). Rows with zero or missing
-exposure are removed automatically.
+A \code{data.frame} with columns \code{year} (if found), \code{age},
+  \code{exposed} and \code{deaths}; rows with missing values or zero
+  exposure are removed.
 }
 \description{
-Reads a CSV or Excel file containing pension fund mortality experience
-data and returns a data frame ready for \code{\link{testAdherence}()}.
+Reads a \code{.csv}, \code{.xlsx} or \code{.xls} file with pension fund
+experience data and returns a \code{data.frame} ready for
+\code{\link{testAdherence}()}.
 }
 \details{
-\strong{Required data format -- long (stacked) format:}
-
-Each row must represent one year-age cell. For multi-year data, stack
-the years vertically. Do \strong{not} spread years across columns
-(wide format).
-
-Correct multi-year long format:
+The data must be in \strong{long (stacked) format}: one row per
+(year, age) cell, with several years stacked one below the other (never
+one column per year):
 \preformatted{
   year  age  exposed  deaths
   2020   40      400       1
@@ -70,48 +55,15 @@ Correct multi-year long format:
   2021   40      390       1
   2021   41      450       2
 }
-
-Single-year format (year column optional):
-\preformatted{
-  age  exposed  deaths
-   40      400       1
-   41      410       1
-}
-
-\strong{Why long format?}
-Each (year, age) cell is treated as an independent observation in all
-statistical tests. More years = more cells = higher test power. Aggregating
-years before loading would reduce the number of cells and lose information.
-
-\strong{Excel files} require the \pkg{readxl} package:
-\preformatted{install.packages("readxl")}
+With a single year the \code{year} column is optional. Excel files need the
+\pkg{readxl} package.
 }
 \examples{
 \dontrun{
-# Standard CSV with default column names
 data <- loadFundData("experience.csv")
-
-# Multi-year CSV with year column named "Ano"
-data <- loadFundData("experiencia.csv",
-                      col_year    = "Ano",
-                      col_age     = "Idade",
-                      col_exposed = "Expostos",
-                      col_deaths  = "Obitos",
-                      sep = ";", dec = ",")
-
-# Excel file, sheet by name, no year column
-data <- loadFundData("fund.xlsx",
-                      col_year    = NULL,
-                      col_age     = "FxEtaria",
-                      col_exposed = "ExpostoRisco",
-                      col_deaths  = "Mortes",
-                      sheet       = "Mortalidade")
-
-# Then test adherence
-result <- testAdherence(data, table = "AT-2000m")
-print(result)
+data <- loadFundData("experiencia.csv", sep = ";", dec = ",",
+                     col_year = "Ano", col_age = "Idade",
+                     col_exposed = "Expostos", col_deaths = "Obitos")
+data <- loadFundData("fund.xlsx", sheet = "Mortalidade")
 }
-}
-\seealso{
-\code{\link{testAdherence}}, \code{\link{listTables}}
 }
