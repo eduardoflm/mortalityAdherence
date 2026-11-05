@@ -19,14 +19,33 @@ Quick start
 
 Function names follow the R package (camelCase); snake_case aliases are
 also provided (test_adherence, list_tables, load_table, load_fund_data, ...).
+
+On import, a short notice is printed (as in the R package). To silence it,
+set the environment variable MORTALITYADHERENCE_QUIET=1 before importing.
 """
+
+import os as _os
 
 from ._adherence import AdherenceResult, testAdherence
 from ._io import loadFundData
 from ._report import exportExcel, htmlTable, printResult
 from ._tables import listTables, loadTable, mortality_tables
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
+
+STARTUP_MESSAGE = (
+    f"mortalityAdherence {__version__}\n"
+    "Os novos testes de ader\u00eancia desenvolvidos s\u00e3o mais adequados "
+    "quando aplicados a idades superiores a 30 anos.\n"
+    "The new adherence tests are best suited to ages above 30.\n"
+    "Reference: de Melo, Graziadei & Targino (2026), SSRN 6668699."
+)
+
+if _os.environ.get("MORTALITYADHERENCE_QUIET", "").strip().lower() not in ("1", "true", "yes"):
+    try:
+        print(STARTUP_MESSAGE)
+    except UnicodeEncodeError:  # console without accented characters: never block the import
+        print(STARTUP_MESSAGE.encode("ascii", "replace").decode("ascii"))
 
 # snake_case aliases (Python convention)
 test_adherence = testAdherence
@@ -42,4 +61,5 @@ __all__ = [
     "htmlTable", "exportExcel", "mortality_tables", "AdherenceResult",
     "test_adherence", "list_tables", "load_table", "load_fund_data",
     "print_result", "html_table", "export_excel", "__version__",
+    "STARTUP_MESSAGE",
 ]

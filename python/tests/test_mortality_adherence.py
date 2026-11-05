@@ -7,6 +7,7 @@ Run with:  pytest   (from the 'python' folder)
 """
 import json
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -287,5 +288,21 @@ def test_export_excel_function(tmp_path):
     res = run("single_year.csv")
     out = ma.exportExcel(res, str(tmp_path / "x.xlsx"))
     assert (tmp_path / "x.xlsx").exists() and out.endswith("x.xlsx")
-    assert ma.__version__ == "0.2.0"
+    assert ma.__version__ == "0.2.1"
     assert res.summary["df"].dtype.name == "Int64"
+
+
+def test_startup_message_on_import():
+    import subprocess, sys
+    msg = "Os novos testes de ader\u00eancia desenvolvidos s\u00e3o mais adequados quando aplicados a idades superiores a 30 anos"
+    env = {k: v for k, v in os.environ.items() if k != "MORTALITYADHERENCE_QUIET"}
+    env["PYTHONIOENCODING"] = "utf-8"
+    out = subprocess.run([sys.executable, "-c", "import mortalityAdherence"],
+                         capture_output=True, text=True, encoding="utf-8", env=env)
+    assert msg in out.stdout
+    assert "mortalityAdherence 0.2.1" in out.stdout
+    env["MORTALITYADHERENCE_QUIET"] = "1"
+    out = subprocess.run([sys.executable, "-c", "import mortalityAdherence"],
+                         capture_output=True, text=True, encoding="utf-8", env=env)
+    assert out.stdout == ""
+    assert msg in ma.STARTUP_MESSAGE

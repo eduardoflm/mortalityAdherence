@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] — 2026-11-05
+
+### Added
+
+- Startup message shown by `library(mortalityAdherence)`, informing that the new
+  adherence tests are best suited to ages above 30 ("Os novos testes de aderência
+  desenvolvidos são mais adequados quando aplicados a idades superiores a 30
+  anos"). Silence it with `suppressPackageStartupMessages(library(mortalityAdherence))`.
+  The Python version shows the same message on import.
+
+---
+
 ## [0.2.0] — 2026-10-29
 
 Aligned with the revised paper (de Melo, Graziadei & Targino, 2026, SSRN 6668699)

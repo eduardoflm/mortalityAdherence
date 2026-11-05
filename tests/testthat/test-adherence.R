@@ -179,3 +179,14 @@ test_that("print, HTML and Excel outputs", {
   exportExcel(r, x)
   expect_true(file.exists(x))
 })
+
+# ---- startup message ---------------------------------------------------------------
+test_that("startup message informs that the tests suit ages above 30", {
+  msg <- mortalityAdherence:::.startup_message()
+  expect_match(msg, paste0("Os novos testes de aderência desenvolvidos são mais ",
+                           "adequados quando aplicados a idades superiores a 30 anos."),
+               fixed = TRUE)
+  expect_match(msg, "mortalityAdherence 0.2.1", fixed = TRUE)
+  expect_message(mortalityAdherence:::.onAttach("", "mortalityAdherence"),
+                 "idades superiores a 30 anos", class = "packageStartupMessage")
+})

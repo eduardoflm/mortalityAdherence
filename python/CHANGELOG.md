@@ -1,5 +1,11 @@
 # Changelog — mortalityAdherence (Python)
 
+## 0.2.1 — 2026-11-05
+
+- Message printed on `import mortalityAdherence`, informing that the new adherence
+  tests are best suited to ages above 30 (same text as the R package). Silence it
+  with the environment variable `MORTALITYADHERENCE_QUIET=1`.
+
 ## 0.2.0 — 2026-10-29
 
 Version numbers of the R and Python packages are now kept in sync.

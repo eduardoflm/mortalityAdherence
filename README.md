@@ -70,6 +70,10 @@ result$summary
 
 ## The 11 Statistical Tests
 
+> **Scope:** the new adherence tests are best suited to ages above 30 — *os novos
+> testes de aderência desenvolvidos são mais adequados quando aplicados a idades
+> superiores a 30 anos.* The package shows this notice when it is loaded.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                  11 ADHERENCE TESTS                             │

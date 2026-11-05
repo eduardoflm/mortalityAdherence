@@ -82,6 +82,11 @@ result = ma.testAdherence(data, table=external)
 
 ## The 11 tests
 
+> **Scope:** the new adherence tests are best suited to ages above 30 — *os novos
+> testes de aderência desenvolvidos são mais adequados quando aplicados a idades
+> superiores a 30 anos.* This notice is printed on `import mortalityAdherence`; set
+> the environment variable `MORTALITYADHERENCE_QUIET=1` to silence it.
+
 | Family | Tests |
 |---|---|
 | Non-parametric | `KS`, `ChiSquare` |
