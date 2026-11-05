@@ -15,6 +15,8 @@ data of a pension fund. It implements **11 statistical tests**, ships with
 **10 built-in mortality tables**, and produces clean, formatted results suitable
 for actuarial reports and regulatory submissions.
 
+The new adherence tests are best suited to ages above 30. See reference.
+
 ---
 
 ## Python version
